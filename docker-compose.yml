@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-counterpoint}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-counterpoint}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - counterpoint-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-counterpoint} -d ${POSTGRES_DB:-counterpoint}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  counterpoint-postgres:
