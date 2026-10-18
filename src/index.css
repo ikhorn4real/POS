@@ -3,9 +3,9 @@
 :root {
   color-scheme: light;
   --surface: #ffffff;
-  --surface-soft: #f8f8fc;
+  --surface-soft: #f8f9fc;
   --border-subtle: #e9eaf0;
-  --text-primary: #252536;
+  --text-primary: #252a36;
   --text-secondary: #666777;
 }
 
@@ -21,7 +21,7 @@ button,
 input,
 select,
 textarea {
-  accent-color: #7664d9;
+  accent-color: #2b46d5;
 }
 
 @media (prefers-reduced-motion: reduce) {

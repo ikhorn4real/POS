@@ -1,8 +1,5 @@
-export const rolePermissions = {
-  owner: ["overview", "checkout", "inventory:read", "inventory:write", "inventory:report", "catalog:write", "sales:read", "team:read", "team:write", "stores:write", "customers:read", "customers:write"],
-  manager: ["overview", "checkout", "inventory:read", "inventory:write", "inventory:report", "catalog:write", "sales:read", "team:read", "team:write", "customers:read", "customers:write"],
-  cashier: ["overview", "checkout", "inventory:read", "sales:own", "customers:read", "customers:write"],
-};
+import { roleCan } from "./permissions.js";
+export { rolePermissions, roleCan } from "./permissions.js";
 
 export function isValidPassword(password) {
   return typeof password === "string" &&
@@ -19,7 +16,7 @@ export function createRequirePermission(permission) {
       error.code = "AUTH_REQUIRED";
       return next(error);
     }
-    if (!rolePermissions[request.user.role]?.includes(permission)) {
+    if (!roleCan(request.user.role, permission)) {
       const error = new Error("Your role does not allow this action.");
       error.status = 403;
       error.code = "FORBIDDEN";
@@ -150,6 +147,7 @@ export function salesQueryFor(
   params.push(limit, offset);
   return {
     sql: `SELECT s.id, s.cashier_id, u.name AS cashier_name, s.customer_id, c.name AS customer_name,
+                 (SELECT si.product_name FROM sale_items si WHERE si.sale_id = s.id ORDER BY si.id LIMIT 1) AS first_product_name,
                  s.method, s.cash_received_cents, s.mobile_money_amount_cents,
                  s.item_count, s.subtotal_cents,
                  s.total_cents, s.created_at

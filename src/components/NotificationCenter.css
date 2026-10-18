@@ -10,9 +10,9 @@
 }
 .notification-button:hover,
 .notification-button[aria-expanded="true"] {
-  color: #584aa6;
-  background: #f6f4ff;
-  border-color: #dcd6f3;
+  color: #2b46d5;
+  background: #eef1ff;
+  border-color: #d6ddff;
 }
 .notification-count {
   position: absolute;
@@ -72,15 +72,15 @@
 .notification-view-all {
   flex: 0 0 auto;
   padding: 7px 10px;
-  color: #5c4eae;
-  background: #f5f3ff;
-  border: 1px solid #e7e2fb;
+  color: #2b46d5;
+  background: #eef1ff;
+  border: 1px solid #d6ddff;
   border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
 }
-.notification-view-all:hover { background: #ece9fc; }
+.notification-view-all:hover { background: #e3e9ff; }
 .notification-list { overflow-y: auto; overscroll-behavior: contain; }
 .notification-item {
   display: grid;
@@ -96,7 +96,7 @@
   text-align: left;
   cursor: pointer;
 }
-.notification-item:hover { background: #fafaff; }
+.notification-item:hover { background: #fafbff; }
 .notification-item-icon {
   display: grid;
   width: 36px;

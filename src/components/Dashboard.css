@@ -45,7 +45,7 @@
   cursor: pointer;
 }
 .expiry-watch-row:first-child { border-top: 0; }
-.expiry-watch-row:hover .expiry-watch-copy strong { color: #6153b4; }
+.expiry-watch-row:hover .expiry-watch-copy strong { color: #2b46d5; }
 .expiry-watch-copy { display: grid; min-width: 0; gap: 4px; }
 .expiry-watch-copy strong {
   overflow: hidden;

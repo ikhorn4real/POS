@@ -21,7 +21,6 @@ import {
 import { supplierNameConflict, supplierResponse, validateSupplierInput } from "../server/suppliers.js";
 import { categoryNameConflict, categoryResponse, validateCategoryInput } from "../server/categories.js";
 import { customerIdFromInput, customerResponse, validateCustomerInput } from "../server/customers.js";
-import { validatePromotionInput } from "../server/promotions.js";
 
 const roles = {
   owner: { id: 1, role: "owner", active: true, auth_version: 0, must_change_password: false },
@@ -381,10 +380,6 @@ test("product response converts database cents and preserves inventory fields", 
       costPrice: 5.25,
       wholesalePrice: 9,
       wholesaleQuantity: 6,
-      discountType: "",
-      discountValue: 0,
-      discountStartsAt: "",
-      discountEndsAt: "",
       stock: 12,
       reorderLevel: 4,
       supplierId: 7,
@@ -452,49 +447,6 @@ test("wholesale price applies to every unit at and above its configured sale qua
   assert.equal(salePriceCents({ ...product, wholesale_price_cents: "0" }, 8), 1250);
 });
 
-test("promotions validate dates and checkout chooses the lowest non-stacked price", () => {
-  assert.deepEqual(validatePromotionInput({
-    discountType: "percent",
-    discountValue: 20,
-    discountStartsAt: "2026-10-01",
-    discountEndsAt: "2026-10-31",
-  }, 1250), {
-    discountType: "percent",
-    discountValueCents: 20,
-    startsAt: "2026-10-01",
-    endsAt: "2026-10-31",
-  });
-  assert.deepEqual(validatePromotionInput({}, 1250), {
-    discountType: null,
-    discountValueCents: null,
-    startsAt: null,
-    endsAt: null,
-  });
-  const product = {
-    selling_price_cents: 1250,
-    wholesale_price_cents: 900,
-    wholesale_quantity: 6,
-    discount_type: "percent",
-    discount_value: "30",
-    discount_starts_at: "2026-10-01",
-    discount_ends_at: "2026-10-31",
-  };
-  assert.equal(salePriceCents(product, 1, "2026-10-01"), 875);
-  assert.equal(salePriceCents(product, 6, "2026-10-31"), 875);
-  assert.equal(salePriceCents(product, 6, "2026-11-01"), 900);
-  assert.throws(() => validatePromotionInput({ discountType: "percent", discountValue: 100 }, 1250), {
-    status: 400,
-    code: "INVALID_PROMOTION",
-  });
-  assert.throws(() => validatePromotionInput({ discountType: "fixed", discountValue: 12.5 }, 1250), {
-    status: 400,
-    code: "INVALID_PROMOTION",
-  });
-  assert.throws(() => validatePromotionInput({ discountType: "percent", discountValue: 10, discountStartsAt: "bad" }, 1250), {
-    status: 400,
-    code: "INVALID_PROMOTION",
-  });
-});
 
 test("supplier input is normalized and rejects invalid names or contact details", () => {
   assert.deepEqual(validateSupplierInput({

@@ -110,12 +110,6 @@ export function productResponse(product, { includeCost = true, includeWholesale 
           wholesaleQuantity: product.wholesale_quantity ?? 0,
         }
       : {}),
-    discountType: product.discount_type ?? "",
-    discountValue: product.discount_value === null || product.discount_value === undefined
-      ? 0
-      : Number(product.discount_type === "fixed" ? product.discount_value / 100 : product.discount_value),
-    discountStartsAt: product.discount_starts_at ?? "",
-    discountEndsAt: product.discount_ends_at ?? "",
     stock: product.stock,
     reorderLevel: product.reorder_level,
     supplierId: product.supplier_id ?? null,
@@ -128,33 +122,16 @@ export function productResponse(product, { includeCost = true, includeWholesale 
   };
 }
 
-export function salePriceCents(product, quantity, date = new Date().toISOString().slice(0, 10)) {
+export function salePriceCents(product, quantity) {
   const retailPrice = Number(product.selling_price_cents);
-  const eligiblePrices = [retailPrice];
   if (
     product.wholesale_quantity > 0 &&
     quantity >= product.wholesale_quantity &&
     Number(product.wholesale_price_cents) > 0
   ) {
-    eligiblePrices.push(Number(product.wholesale_price_cents));
+    return Math.min(retailPrice, Number(product.wholesale_price_cents));
   }
-  const startsAt = product.discount_starts_at
-    ? String(product.discount_starts_at).slice(0, 10)
-    : null;
-  const endsAt = product.discount_ends_at
-    ? String(product.discount_ends_at).slice(0, 10)
-    : null;
-  const active = product.discount_type &&
-    (!startsAt || date >= startsAt) &&
-    (!endsAt || date <= endsAt);
-  const discountValue = Number(product.discount_value);
-  if (active && discountValue > 0) {
-    const promotionPrice = product.discount_type === "percent"
-      ? retailPrice - Math.round(retailPrice * discountValue / 100)
-      : retailPrice - discountValue;
-    if (promotionPrice > 0) eligiblePrices.push(promotionPrice);
-  }
-  return Math.min(...eligiblePrices);
+  return retailPrice;
 }
 
 export function skuConflict(error) {

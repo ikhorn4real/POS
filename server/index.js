@@ -27,10 +27,21 @@ import {
   skuConflict,
   validateProductInput,
 } from "./product-fields.js";
-import { supplierNameConflict, supplierResponse, validateSupplierInput } from "./suppliers.js";
-import { categoryNameConflict, categoryResponse, validateCategoryInput } from "./categories.js";
-import { customerIdFromInput, customerResponse, validateCustomerInput } from "./customers.js";
-import { validatePromotionInput } from "./promotions.js";
+import {
+  supplierNameConflict,
+  supplierResponse,
+  validateSupplierInput,
+} from "./suppliers.js";
+import {
+  categoryNameConflict,
+  categoryResponse,
+  validateCategoryInput,
+} from "./categories.js";
+import {
+  customerIdFromInput,
+  customerResponse,
+  validateCustomerInput,
+} from "./customers.js";
 
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -42,14 +53,18 @@ function isValidDateOnly(value) {
     return false;
   }
   const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
 }
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required.");
 }
 if (!sessionSecret || sessionSecret.length < 32) {
-  throw new Error("Set SESSION_SECRET to a random value of at least 32 characters.");
+  throw new Error(
+    "Set SESSION_SECRET to a random value of at least 32 characters.",
+  );
 }
 
 const pool = new Pool({
@@ -136,7 +151,11 @@ function calculateSaleQuote(products, quantities, userRole) {
     !Number.isSafeInteger(subtotalCents) ||
     !Number.isSafeInteger(totalCents)
   ) {
-    throw apiError(400, "This order exceeds the maximum supported total.", "SALE_TOTAL_TOO_LARGE");
+    throw apiError(
+      400,
+      "This order exceeds the maximum supported total.",
+      "SALE_TOTAL_TOO_LARGE",
+    );
   }
   return {
     items,
@@ -159,12 +178,9 @@ function saleProductQuery(forUpdate = false) {
                  p.selling_price_cents, p.wholesale_price_cents,
                  p.wholesale_quantity, i.stock, i.reorder_level,
                  p.supplier_id, s.name AS supplier_name, p.expiry_date,
-                 p.color, p.initials, pr.discount_type, pr.discount_value,
-                 pr.starts_at::text AS discount_starts_at,
-                 pr.ends_at::text AS discount_ends_at
+                 p.color, p.initials
           FROM products p
           JOIN store_inventory i ON i.product_id = p.id AND i.store_id = $2
-          LEFT JOIN store_promotions pr ON pr.product_id = p.id AND pr.store_id = $2
           LEFT JOIN suppliers s ON s.id = p.supplier_id
           WHERE p.active = TRUE AND p.id = ANY($1::integer[])
           ORDER BY p.id${forUpdate ? " FOR UPDATE OF p, i" : ""}`;
@@ -181,7 +197,11 @@ function saleQuantities(items) {
       !Number.isInteger(item?.quantity) ||
       item.quantity < 1
     ) {
-      throw apiError(400, "The sale contains an invalid product or quantity.", "INVALID_SALE");
+      throw apiError(
+        400,
+        "The sale contains an invalid product or quantity.",
+        "INVALID_SALE",
+      );
     }
     quantities.set(
       item.productId,
@@ -200,19 +220,21 @@ function asyncRoute(handler) {
 function requireSameOrigin(request, response, next) {
   const origin = request.get("origin");
   if (!origin || !allowedOrigins.has(origin)) {
-    return next(apiError(403, "Request origin is not allowed.", "ORIGIN_NOT_ALLOWED"));
+    return next(
+      apiError(403, "Request origin is not allowed.", "ORIGIN_NOT_ALLOWED"),
+    );
   }
   return next();
 }
 
 const requireUser = createRequireUser(async (userId) => {
   const { rows } = await pool.query(
-      `SELECT id, name, email, role, active, auth_version,
+    `SELECT id, name, email, role, active, auth_version,
               must_change_password
        FROM users
        WHERE id = $1`,
-      [userId],
-    );
+    [userId],
+  );
   return rows[0];
 });
 const requirePermission = createRequirePermission;
@@ -233,7 +255,11 @@ function storeDetailsFromInput(input) {
       continue;
     }
     if (typeof value !== "string" || value.trim().length > maxLength) {
-      throw apiError(400, `Enter a valid ${field} (up to ${maxLength} characters).`, "INVALID_STORE");
+      throw apiError(
+        400,
+        `Enter a valid ${field} (up to ${maxLength} characters).`,
+        "INVALID_STORE",
+      );
     }
     details[field] = value.trim();
   }
@@ -250,34 +276,49 @@ function storeDetailsFromInput(input) {
 function requireStore(request, response, next) {
   const storeId = Number(request.get("x-store-id"));
   if (!Number.isSafeInteger(storeId) || storeId < 1) {
-    return next(apiError(400, "Select a store before continuing.", "STORE_REQUIRED"));
+    return next(
+      apiError(400, "Select a store before continuing.", "STORE_REQUIRED"),
+    );
   }
-  pool.query(
-    `SELECT s.id, s.name
+  pool
+    .query(
+      `SELECT s.id, s.name
      FROM stores s
      WHERE s.id = $1 AND s.active = TRUE
        AND ($2 = 'owner' OR EXISTS (
          SELECT 1 FROM user_stores us WHERE us.store_id = s.id AND us.user_id = $3
        ))`,
-    [storeId, request.user.role, request.user.id],
-  ).then(({ rows }) => {
-    if (!rows[0]) {
-      next(apiError(403, "You do not have access to this store.", "STORE_FORBIDDEN"));
-      return;
-    }
-    request.store = rows[0];
-    request.storeId = rows[0].id;
-    next();
-  }).catch(next);
+      [storeId, request.user.role, request.user.id],
+    )
+    .then(({ rows }) => {
+      if (!rows[0]) {
+        next(
+          apiError(
+            403,
+            "You do not have access to this store.",
+            "STORE_FORBIDDEN",
+          ),
+        );
+        return;
+      }
+      request.store = rows[0];
+      request.storeId = rows[0].id;
+      next();
+    })
+    .catch(next);
 }
-const dummyPasswordHash = "$2b$12$LF4GtgsCsF84gAtkukZ31.AtIi.kesN.doeRd3NAOpUjshAtwtCPG";
+const dummyPasswordHash =
+  "$2b$12$LF4GtgsCsF84gAtkukZ31.AtIi.kesN.doeRd3NAOpUjshAtwtCPG";
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  message: { error: "Too many sign-in attempts. Try again later.", code: "RATE_LIMITED" },
+  message: {
+    error: "Too many sign-in attempts. Try again later.",
+    code: "RATE_LIMITED",
+  },
 });
 
 app.use("/api", (request, response, next) => {
@@ -287,44 +328,69 @@ app.use("/api", (request, response, next) => {
   return next();
 });
 
-app.get("/api/health", asyncRoute(async (request, response) => {
-  await pool.query("SELECT 1");
-  response.json({ status: "ok" });
-}));
+app.get(
+  "/api/health",
+  asyncRoute(async (request, response) => {
+    await pool.query("SELECT 1");
+    response.json({ status: "ok" });
+  }),
+);
 
-app.post("/api/auth/login", loginLimiter, asyncRoute(async (request, response) => {
-  const email = typeof request.body?.email === "string" ? request.body.email.trim().toLowerCase() : "";
-  const password = typeof request.body?.password === "string" ? request.body.password : "";
-  if (!email || email.length > 254 || !password || password.length > 256 || Buffer.byteLength(password, "utf8") > 72) {
-    throw apiError(400, "Enter your email and password.", "INVALID_CREDENTIALS");
-  }
-  const { rows } = await pool.query(
-    `SELECT id, name, email, role, password_hash, auth_version,
+app.post(
+  "/api/auth/login",
+  loginLimiter,
+  asyncRoute(async (request, response) => {
+    const email =
+      typeof request.body?.email === "string"
+        ? request.body.email.trim().toLowerCase()
+        : "";
+    const password =
+      typeof request.body?.password === "string" ? request.body.password : "";
+    if (
+      !email ||
+      email.length > 254 ||
+      !password ||
+      password.length > 256 ||
+      Buffer.byteLength(password, "utf8") > 72
+    ) {
+      throw apiError(
+        400,
+        "Enter your email and password.",
+        "INVALID_CREDENTIALS",
+      );
+    }
+    const { rows } = await pool.query(
+      `SELECT id, name, email, role, password_hash, auth_version,
             must_change_password
      FROM users
      WHERE email = $1 AND active = TRUE`,
-    [email],
-  );
-  const user = rows[0];
-  const passwordMatches = user
-    ? await bcrypt.compare(password, user.password_hash)
-    : await bcrypt.compare(password, dummyPasswordHash);
-  if (!user || !passwordMatches) {
-    throw apiError(401, "Email or password is incorrect.", "INVALID_CREDENTIALS");
-  }
-  await regenerateSession(request);
-  request.session.userId = user.id;
-  request.session.authVersion = Number(user.auth_version);
-  response.json({
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      mustChangePassword: user.must_change_password,
-    },
-  });
-}));
+      [email],
+    );
+    const user = rows[0];
+    const passwordMatches = user
+      ? await bcrypt.compare(password, user.password_hash)
+      : await bcrypt.compare(password, dummyPasswordHash);
+    if (!user || !passwordMatches) {
+      throw apiError(
+        401,
+        "Email or password is incorrect.",
+        "INVALID_CREDENTIALS",
+      );
+    }
+    await regenerateSession(request);
+    request.session.userId = user.id;
+    request.session.authVersion = Number(user.auth_version);
+    response.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.must_change_password,
+      },
+    });
+  }),
+);
 
 app.get("/api/auth/session", requireUser, (request, response) => {
   response.json({
@@ -338,91 +404,112 @@ app.get("/api/auth/session", requireUser, (request, response) => {
   });
 });
 
-app.post("/api/auth/password", requireUser, asyncRoute(async (request, response) => {
-  const currentPassword = typeof request.body?.currentPassword === "string"
-    ? request.body.currentPassword
-    : "";
-  const newPassword = typeof request.body?.newPassword === "string"
-    ? request.body.newPassword
-    : "";
-  if (
-    (!request.user.must_change_password && !currentPassword) ||
-    !isValidPassword(newPassword)
-  ) {
-    throw apiError(
-      400,
-      request.user.must_change_password
-        ? "Enter a new password of 8 to 72 characters."
-        : "Enter your current password and a new password of 8 to 72 characters.",
-      "INVALID_PASSWORD",
-    );
-  }
+app.post(
+  "/api/auth/password",
+  requireUser,
+  asyncRoute(async (request, response) => {
+    const currentPassword =
+      typeof request.body?.currentPassword === "string"
+        ? request.body.currentPassword
+        : "";
+    const newPassword =
+      typeof request.body?.newPassword === "string"
+        ? request.body.newPassword
+        : "";
+    if (
+      (!request.user.must_change_password && !currentPassword) ||
+      !isValidPassword(newPassword)
+    ) {
+      throw apiError(
+        400,
+        request.user.must_change_password
+          ? "Enter a new password of 8 to 72 characters."
+          : "Enter your current password and a new password of 8 to 72 characters.",
+        "INVALID_PASSWORD",
+      );
+    }
 
-  const { rows } = await pool.query(
-    "SELECT password_hash, auth_version, must_change_password FROM users WHERE id = $1 AND active = TRUE",
-    [request.user.id],
-  );
-  if (
-    !rows[0] ||
-    (!request.user.must_change_password &&
-      !(await bcrypt.compare(currentPassword, rows[0].password_hash))) ||
-    (request.user.must_change_password && !isValidPassword(newPassword))
-  ) {
-    throw apiError(400, "Your current password is incorrect.", "CURRENT_PASSWORD_INCORRECT");
-  }
-  if (
-    !request.user.must_change_password &&
-    currentPassword === newPassword
-  ) {
-    throw apiError(400, "Choose a new password that differs from your current password.", "PASSWORD_UNCHANGED");
-  }
-  const passwordHash = await bcrypt.hash(newPassword, 12);
-  const client = await pool.connect();
-  let authVersion;
-  try {
-    await client.query("BEGIN");
-    const { rows: updatedUsers } = await client.query(
-      `UPDATE users
+    const { rows } = await pool.query(
+      "SELECT password_hash, auth_version, must_change_password FROM users WHERE id = $1 AND active = TRUE",
+      [request.user.id],
+    );
+    if (
+      !rows[0] ||
+      (!request.user.must_change_password &&
+        !(await bcrypt.compare(currentPassword, rows[0].password_hash))) ||
+      (request.user.must_change_password && !isValidPassword(newPassword))
+    ) {
+      throw apiError(
+        400,
+        "Your current password is incorrect.",
+        "CURRENT_PASSWORD_INCORRECT",
+      );
+    }
+    if (!request.user.must_change_password && currentPassword === newPassword) {
+      throw apiError(
+        400,
+        "Choose a new password that differs from your current password.",
+        "PASSWORD_UNCHANGED",
+      );
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const client = await pool.connect();
+    let authVersion;
+    try {
+      await client.query("BEGIN");
+      const { rows: updatedUsers } = await client.query(
+        `UPDATE users
        SET password_hash = $1, must_change_password = FALSE,
            auth_version = auth_version + 1
        WHERE id = $2 AND active = TRUE
        RETURNING auth_version`,
-      [passwordHash, request.user.id],
-    );
-    if (!updatedUsers[0]) {
-      throw apiError(401, "Your account is no longer active.", "AUTH_REQUIRED");
+        [passwordHash, request.user.id],
+      );
+      if (!updatedUsers[0]) {
+        throw apiError(
+          401,
+          "Your account is no longer active.",
+          "AUTH_REQUIRED",
+        );
+      }
+      authVersion = Number(updatedUsers[0].auth_version);
+      await client.query(
+        "DELETE FROM user_sessions WHERE sess->>'userId' = $1",
+        [String(request.user.id)],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-    authVersion = Number(updatedUsers[0].auth_version);
-    await client.query(
-      "DELETE FROM user_sessions WHERE sess->>'userId' = $1",
-      [String(request.user.id)],
-    );
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-  await regenerateSession(request);
-  request.session.userId = request.user.id;
-  request.session.authVersion = authVersion;
-  response.json({ message: "Password changed successfully." });
-}));
+    await regenerateSession(request);
+    request.session.userId = request.user.id;
+    request.session.authVersion = authVersion;
+    response.json({ message: "Password changed successfully." });
+  }),
+);
 
-app.post("/api/auth/logout", asyncRoute(async (request, response) => {
-  if (request.session) await destroySession(request);
-  response.clearCookie("counterpoint.sid", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-  });
-  response.status(204).end();
-}));
+app.post(
+  "/api/auth/logout",
+  asyncRoute(async (request, response) => {
+    if (request.session) await destroySession(request);
+    response.clearCookie("counterpoint.sid", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+    response.status(204).end();
+  }),
+);
 
-app.get("/api/stores", requireUser, asyncRoute(async (request, response) => {
-  const { rows } = await pool.query(
-    `SELECT s.id, s.name, s.branch, s.manager_name, s.location,
+app.get(
+  "/api/stores",
+  requireUser,
+  asyncRoute(async (request, response) => {
+    const { rows } = await pool.query(
+      `SELECT s.id, s.name, s.branch, s.manager_name, s.location,
             s.contact_phone, s.contact_email, s.active
      FROM stores s
      WHERE ($3::boolean OR s.active = TRUE)
@@ -430,108 +517,151 @@ app.get("/api/stores", requireUser, asyncRoute(async (request, response) => {
          SELECT 1 FROM user_stores us WHERE us.store_id = s.id AND us.user_id = $2
        ))
      ORDER BY s.name, s.branch`,
-    [request.user.role, request.user.id, request.query.includeInactive === "true"],
-  );
-  response.json({
-    stores: rows.map((store) => ({
-      id: store.id,
-      name: store.name,
-      branch: store.branch,
-      manager: store.manager_name,
-      location: store.location,
-      phone: store.contact_phone,
-      email: store.contact_email,
-      active: store.active,
-    })),
-  });
-}));
+      [
+        request.user.role,
+        request.user.id,
+        request.query.includeInactive === "true",
+      ],
+    );
+    response.json({
+      stores: rows.map((store) => ({
+        id: store.id,
+        name: store.name,
+        branch: store.branch,
+        manager: store.manager_name,
+        location: store.location,
+        phone: store.contact_phone,
+        email: store.contact_email,
+        active: store.active,
+      })),
+    });
+  }),
+);
 
-app.post("/api/stores", requireUser, requirePermission("stores:write"), asyncRoute(async (request, response) => {
-  if (request.user.role !== "owner") {
-    throw apiError(403, "Only an administrator can create stores.", "FORBIDDEN");
-  }
-  const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
-  const details = storeDetailsFromInput(request.body);
-  if (!name || name.length > 120) {
-    throw apiError(400, "Enter a store name of 1 to 120 characters.", "INVALID_STORE");
-  }
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows } = await client.query(
-      `INSERT INTO stores (
+app.post(
+  "/api/stores",
+  requireUser,
+  requirePermission("stores:write"),
+  asyncRoute(async (request, response) => {
+    if (request.user.role !== "owner") {
+      throw apiError(
+        403,
+        "Only an administrator can create stores.",
+        "FORBIDDEN",
+      );
+    }
+    const name =
+      typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    const details = storeDetailsFromInput(request.body);
+    if (!name || name.length > 120) {
+      throw apiError(
+        400,
+        "Enter a store name of 1 to 120 characters.",
+        "INVALID_STORE",
+      );
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `INSERT INTO stores (
          name, branch, manager_name, location, contact_phone, contact_email
        )
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, branch, manager_name AS manager, location,
                  contact_phone AS phone, contact_email AS email, active`,
-      [
-        name,
-        details.branch ?? "",
-        details.manager ?? "",
-        details.location ?? "",
-        details.phone ?? "",
-        details.email ?? "",
-      ],
-    );
-    await client.query(
-      `INSERT INTO store_inventory (store_id, product_id, stock, reorder_level)
+        [
+          name,
+          details.branch ?? "",
+          details.manager ?? "",
+          details.location ?? "",
+          details.phone ?? "",
+          details.email ?? "",
+        ],
+      );
+      await client.query(
+        `INSERT INTO store_inventory (store_id, product_id, stock, reorder_level)
        SELECT $1, id, 0, reorder_level FROM products WHERE active = TRUE
        ON CONFLICT DO NOTHING`,
-      [rows[0].id],
-    );
-    await client.query("COMMIT");
-    response.status(201).json({ store: rows[0] });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (error.code === "23505" && error.constraint === "stores_name_branch_ci_key") {
-      throw apiError(409, "A branch with that name already exists for this store.", "BRANCH_ALREADY_EXISTS");
+        [rows[0].id],
+      );
+      await client.query("COMMIT");
+      response.status(201).json({ store: rows[0] });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (
+        error.code === "23505" &&
+        error.constraint === "stores_name_branch_ci_key"
+      ) {
+        throw apiError(
+          409,
+          "A branch with that name already exists for this store.",
+          "BRANCH_ALREADY_EXISTS",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
     }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+  }),
+);
 
-app.put("/api/stores/:id", requireUser, requirePermission("stores:write"), asyncRoute(async (request, response) => {
-  if (request.user.role !== "owner") {
-    throw apiError(403, "Only an administrator can change store details.", "FORBIDDEN");
-  }
-  const id = Number(request.params.id);
-  const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
-  const details = storeDetailsFromInput(request.body);
-  const active = request.body?.active;
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid store ID.", "INVALID_STORE_ID");
-  }
-  if (!name || name.length > 120 || typeof active !== "boolean") {
-    throw apiError(400, "Enter a store name of 1 to 120 characters and a valid status.", "INVALID_STORE");
-  }
+app.put(
+  "/api/stores/:id",
+  requireUser,
+  requirePermission("stores:write"),
+  asyncRoute(async (request, response) => {
+    if (request.user.role !== "owner") {
+      throw apiError(
+        403,
+        "Only an administrator can change store details.",
+        "FORBIDDEN",
+      );
+    }
+    const id = Number(request.params.id);
+    const name =
+      typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    const details = storeDetailsFromInput(request.body);
+    const active = request.body?.active;
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid store ID.", "INVALID_STORE_ID");
+    }
+    if (!name || name.length > 120 || typeof active !== "boolean") {
+      throw apiError(
+        400,
+        "Enter a store name of 1 to 120 characters and a valid status.",
+        "INVALID_STORE",
+      );
+    }
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock(741092)");
-    const { rows: stores } = await client.query(
-      `SELECT s.id, s.active
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(741092)");
+      const { rows: stores } = await client.query(
+        `SELECT s.id, s.active
        FROM stores s
        WHERE s.id = $1
        FOR UPDATE`,
-      [id],
-    );
-    if (!stores[0]) {
-      throw apiError(404, "Store not found.", "STORE_NOT_FOUND");
-    }
-    if (stores[0].active && !active) {
-      const { rows: activeStores } = await client.query(
-        "SELECT id FROM stores WHERE active = TRUE ORDER BY id FOR UPDATE",
+        [id],
       );
-      if (activeStores.length <= 1) {
-        throw apiError(409, "At least one store must remain active.", "LAST_ACTIVE_STORE");
+      if (!stores[0]) {
+        throw apiError(404, "Store not found.", "STORE_NOT_FOUND");
       }
-    }
-    const { rows } = await client.query(
-      `UPDATE stores
+      if (stores[0].active && !active) {
+        const { rows: activeStores } = await client.query(
+          "SELECT id FROM stores WHERE active = TRUE ORDER BY id FOR UPDATE",
+        );
+        if (activeStores.length <= 1) {
+          throw apiError(
+            409,
+            "At least one store must remain active.",
+            "LAST_ACTIVE_STORE",
+          );
+        }
+      }
+      const { rows } = await client.query(
+        `UPDATE stores
        SET name = $1, active = $2,
            branch = COALESCE($3, branch),
            manager_name = COALESCE($4, manager_name),
@@ -541,214 +671,310 @@ app.put("/api/stores/:id", requireUser, requirePermission("stores:write"), async
        WHERE id = $8
        RETURNING id, name, branch, manager_name AS manager, location,
                  contact_phone AS phone, contact_email AS email, active`,
-      [
-        name, active, details.branch, details.manager, details.location,
-        details.phone, details.email, id,
-      ],
-    );
-    await client.query("COMMIT");
-    response.json({ store: rows[0] });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (error.code === "23505" && error.constraint === "stores_name_branch_ci_key") {
-      throw apiError(409, "A branch with that name already exists for this store.", "BRANCH_ALREADY_EXISTS");
+        [
+          name,
+          active,
+          details.branch,
+          details.manager,
+          details.location,
+          details.phone,
+          details.email,
+          id,
+        ],
+      );
+      await client.query("COMMIT");
+      response.json({ store: rows[0] });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (
+        error.code === "23505" &&
+        error.constraint === "stores_name_branch_ci_key"
+      ) {
+        throw apiError(
+          409,
+          "A branch with that name already exists for this store.",
+          "BRANCH_ALREADY_EXISTS",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
     }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+  }),
+);
 
-app.get("/api/products", requireUser, requirePermission("inventory:read"), requireStore, asyncRoute(async (request, response) => {
-  const { rows } = await pool.query(
-    `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
+app.get(
+  "/api/products",
+  requireUser,
+  requirePermission("inventory:read"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const { rows } = await pool.query(
+      `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
             p.wholesale_price_cents, p.wholesale_quantity, i.stock, i.reorder_level,
-            pr.discount_type, pr.discount_value, pr.starts_at::text AS discount_starts_at,
-            pr.ends_at::text AS discount_ends_at,
             p.supplier_id, s.name AS supplier_name, p.expiry_date,
             p.production_description, p.mft_date::text AS mft_date, p.color, p.initials
      FROM products p
      JOIN store_inventory i ON i.product_id = p.id AND i.store_id = $1
-     LEFT JOIN store_promotions pr ON pr.product_id = p.id AND pr.store_id = $1
      LEFT JOIN suppliers s ON s.id = p.supplier_id
      WHERE p.active = TRUE
      ORDER BY p.name`,
-    [request.storeId],
-  );
-  response.json({
-    products: rows.map((product) =>
-      productResponse(product, {
-        includeCost: request.user.role !== "cashier",
-        includeWholesale: true,
-      }),
-    ),
-  });
-}));
+      [request.storeId],
+    );
+    response.json({
+      products: rows.map((product) =>
+        productResponse(product, {
+          includeCost: request.user.role !== "cashier",
+          includeWholesale: true,
+        }),
+      ),
+    });
+  }),
+);
 
-app.get("/api/suppliers", requireUser, requirePermission("inventory:write"), asyncRoute(async (request, response) => {
-  const { rows } = await pool.query(
-    `SELECT id, name, contact_name, email, phone, created_at
+app.get(
+  "/api/suppliers",
+  requireUser,
+  requirePermission("inventory:write"),
+  asyncRoute(async (request, response) => {
+    const { rows } = await pool.query(
+      `SELECT id, name, contact_name, email, phone, created_at
      FROM suppliers
      ORDER BY name`,
-  );
-  response.json({ suppliers: rows.map(supplierResponse) });
-}));
+    );
+    response.json({ suppliers: rows.map(supplierResponse) });
+  }),
+);
 
-app.post("/api/suppliers", requireUser, requirePermission("catalog:write"), asyncRoute(async (request, response) => {
-  const supplier = validateSupplierInput(request.body);
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO suppliers (name, contact_name, email, phone)
+app.post(
+  "/api/suppliers",
+  requireUser,
+  requirePermission("catalog:write"),
+  asyncRoute(async (request, response) => {
+    const supplier = validateSupplierInput(request.body);
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO suppliers (name, contact_name, email, phone)
        VALUES ($1, $2, $3, $4)
        RETURNING id, name, contact_name, email, phone, created_at`,
-      [supplier.name, supplier.contactName, supplier.email, supplier.phone],
-    );
-    response.status(201).json({ supplier: supplierResponse(rows[0]) });
-  } catch (error) {
-    if (supplierNameConflict(error)) {
-      throw apiError(409, "A supplier with that name already exists.", "SUPPLIER_ALREADY_EXISTS");
+        [supplier.name, supplier.contactName, supplier.email, supplier.phone],
+      );
+      response.status(201).json({ supplier: supplierResponse(rows[0]) });
+    } catch (error) {
+      if (supplierNameConflict(error)) {
+        throw apiError(
+          409,
+          "A supplier with that name already exists.",
+          "SUPPLIER_ALREADY_EXISTS",
+        );
+      }
+      throw error;
     }
-    throw error;
-  }
-}));
+  }),
+);
 
-app.put("/api/suppliers/:id", requireUser, requirePermission("catalog:write"), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid supplier ID.", "INVALID_SUPPLIER_ID");
-  }
-  const supplier = validateSupplierInput(request.body);
-  try {
-    const { rows } = await pool.query(
-      `UPDATE suppliers
+app.put(
+  "/api/suppliers/:id",
+  requireUser,
+  requirePermission("catalog:write"),
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid supplier ID.", "INVALID_SUPPLIER_ID");
+    }
+    const supplier = validateSupplierInput(request.body);
+    try {
+      const { rows } = await pool.query(
+        `UPDATE suppliers
        SET name = $1, contact_name = $2, email = $3, phone = $4
        WHERE id = $5
        RETURNING id, name, contact_name, email, phone, created_at`,
-      [supplier.name, supplier.contactName, supplier.email, supplier.phone, id],
-    );
-    if (!rows[0]) throw apiError(404, "Supplier not found.", "SUPPLIER_NOT_FOUND");
-    response.json({ supplier: supplierResponse(rows[0]) });
-  } catch (error) {
-    if (supplierNameConflict(error)) {
-      throw apiError(409, "A supplier with that name already exists.", "SUPPLIER_ALREADY_EXISTS");
+        [
+          supplier.name,
+          supplier.contactName,
+          supplier.email,
+          supplier.phone,
+          id,
+        ],
+      );
+      if (!rows[0])
+        throw apiError(404, "Supplier not found.", "SUPPLIER_NOT_FOUND");
+      response.json({ supplier: supplierResponse(rows[0]) });
+    } catch (error) {
+      if (supplierNameConflict(error)) {
+        throw apiError(
+          409,
+          "A supplier with that name already exists.",
+          "SUPPLIER_ALREADY_EXISTS",
+        );
+      }
+      throw error;
     }
-    throw error;
-  }
-}));
+  }),
+);
 
-app.get("/api/categories", requireUser, requirePermission("inventory:read"), asyncRoute(async (request, response) => {
-  const { rows } = await pool.query(
-    `SELECT c.id, c.name, COUNT(p.id)::integer AS product_count
+app.get(
+  "/api/categories",
+  requireUser,
+  requirePermission("inventory:read"),
+  asyncRoute(async (request, response) => {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.name, COUNT(p.id)::integer AS product_count
      FROM categories c
      LEFT JOIN products p ON p.category = c.name AND p.active = TRUE
      GROUP BY c.id
      ORDER BY c.name`,
-  );
-  response.json({ categories: rows.map(categoryResponse) });
-}));
+    );
+    response.json({ categories: rows.map(categoryResponse) });
+  }),
+);
 
-app.post("/api/categories", requireUser, requirePermission("catalog:write"), asyncRoute(async (request, response) => {
-  const category = validateCategoryInput(request.body);
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO categories (name)
+app.post(
+  "/api/categories",
+  requireUser,
+  requirePermission("catalog:write"),
+  asyncRoute(async (request, response) => {
+    const category = validateCategoryInput(request.body);
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO categories (name)
        VALUES ($1)
        RETURNING id, name`,
-      [category.name],
-    );
-    response.status(201).json({ category: categoryResponse(rows[0]) });
-  } catch (error) {
-    if (categoryNameConflict(error)) {
-      throw apiError(409, "A category with that name already exists.", "CATEGORY_ALREADY_EXISTS");
+        [category.name],
+      );
+      response.status(201).json({ category: categoryResponse(rows[0]) });
+    } catch (error) {
+      if (categoryNameConflict(error)) {
+        throw apiError(
+          409,
+          "A category with that name already exists.",
+          "CATEGORY_ALREADY_EXISTS",
+        );
+      }
+      throw error;
     }
-    throw error;
-  }
-}));
+  }),
+);
 
-app.put("/api/categories/:id", requireUser, requirePermission("catalog:write"), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid category ID.", "INVALID_CATEGORY_ID");
-  }
-  const category = validateCategoryInput(request.body);
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: existingRows } = await client.query(
-      "SELECT id, name FROM categories WHERE id = $1 FOR UPDATE",
-      [id],
-    );
-    if (!existingRows[0]) throw apiError(404, "Category not found.", "CATEGORY_NOT_FOUND");
-    const { rows } = await client.query(
-      `UPDATE categories
+app.put(
+  "/api/categories/:id",
+  requireUser,
+  requirePermission("catalog:write"),
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid category ID.", "INVALID_CATEGORY_ID");
+    }
+    const category = validateCategoryInput(request.body);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: existingRows } = await client.query(
+        "SELECT id, name FROM categories WHERE id = $1 FOR UPDATE",
+        [id],
+      );
+      if (!existingRows[0])
+        throw apiError(404, "Category not found.", "CATEGORY_NOT_FOUND");
+      const { rows } = await client.query(
+        `UPDATE categories
        SET name = $1
        WHERE id = $2
        RETURNING id, name`,
-      [category.name, id],
-    );
-    await client.query(
-      "UPDATE products SET category = $1 WHERE LOWER(category) = LOWER($2)",
-      [rows[0].name, existingRows[0].name],
-    );
-    const { rows: countRows } = await client.query(
-      "SELECT COUNT(*)::integer AS product_count FROM products WHERE category = $1 AND active = TRUE",
-      [rows[0].name],
-    );
-    await client.query("COMMIT");
-    response.json({ category: categoryResponse({ ...rows[0], product_count: countRows[0].product_count }) });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (categoryNameConflict(error)) {
-      throw apiError(409, "A category with that name already exists.", "CATEGORY_ALREADY_EXISTS");
+        [category.name, id],
+      );
+      await client.query(
+        "UPDATE products SET category = $1 WHERE LOWER(category) = LOWER($2)",
+        [rows[0].name, existingRows[0].name],
+      );
+      const { rows: countRows } = await client.query(
+        "SELECT COUNT(*)::integer AS product_count FROM products WHERE category = $1 AND active = TRUE",
+        [rows[0].name],
+      );
+      await client.query("COMMIT");
+      response.json({
+        category: categoryResponse({
+          ...rows[0],
+          product_count: countRows[0].product_count,
+        }),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (categoryNameConflict(error)) {
+        throw apiError(
+          409,
+          "A category with that name already exists.",
+          "CATEGORY_ALREADY_EXISTS",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
     }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+  }),
+);
 
 async function resolveCategoryName(name, queryable = pool) {
   const { rows } = await queryable.query(
     "SELECT name FROM categories WHERE LOWER(name) = LOWER($1)",
     [name],
   );
-  if (!rows[0]) throw apiError(400, "Select a category from the category list.", "INVALID_CATEGORY");
+  if (!rows[0])
+    throw apiError(
+      400,
+      "Select a category from the category list.",
+      "INVALID_CATEGORY",
+    );
   return rows[0].name;
 }
 
-app.post("/api/products", requireUser, requirePermission("catalog:write"), requireStore, asyncRoute(async (request, response) => {
-  const product = validateProductInput(request.body, { requireSku: false });
-  const promotion = validatePromotionInput(request.body, product.sellingPriceCents);
-  product.category = await resolveCategoryName(product.category);
-  const targetStoreId = request.body.storeId === undefined
-    ? request.storeId
-    : Number(request.body.storeId);
-  if (!Number.isSafeInteger(targetStoreId) || targetStoreId < 1) {
-    throw apiError(400, "Select a valid destination store.", "INVALID_STORE");
-  }
-  const initials = product.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: targetStoreRows } = await client.query(
-      `SELECT s.id
+app.post(
+  "/api/products",
+  requireUser,
+  requirePermission("catalog:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const product = validateProductInput(request.body, { requireSku: false });
+
+    product.category = await resolveCategoryName(product.category);
+    const targetStoreId =
+      request.body.storeId === undefined
+        ? request.storeId
+        : Number(request.body.storeId);
+    if (!Number.isSafeInteger(targetStoreId) || targetStoreId < 1) {
+      throw apiError(400, "Select a valid destination store.", "INVALID_STORE");
+    }
+    const initials = product.name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: targetStoreRows } = await client.query(
+        `SELECT s.id
        FROM stores s
        WHERE s.id = $1 AND s.active = TRUE
          AND ($2 = 'owner' OR EXISTS (
            SELECT 1 FROM user_stores us WHERE us.store_id = s.id AND us.user_id = $3
          ))`,
-      [targetStoreId, request.user.role, request.user.id],
-    );
-    if (!targetStoreRows[0]) {
-      throw apiError(403, "You do not have access to the selected store.", "STORE_FORBIDDEN");
-    }
-    const { rows: idRows } = await client.query(
-      "SELECT nextval(pg_get_serial_sequence('products', 'id')) AS id",
-    );
-    const id = Number(idRows[0].id);
-    const sku = generatedSku(id);
-    const { rows } = await client.query(
-      `INSERT INTO products (
+        [targetStoreId, request.user.role, request.user.id],
+      );
+      if (!targetStoreRows[0]) {
+        throw apiError(
+          403,
+          "You do not have access to the selected store.",
+          "STORE_FORBIDDEN",
+        );
+      }
+      const { rows: idRows } = await client.query(
+        "SELECT nextval(pg_get_serial_sequence('products', 'id')) AS id",
+      );
+      const id = Number(idRows[0].id);
+      const sku = generatedSku(id);
+      const { rows } = await client.query(
+        `INSERT INTO products (
          id, name, sku, category, cost_price_cents, selling_price_cents,
          wholesale_price_cents, wholesale_quantity, stock, reorder_level, supplier_id,
          expiry_date, production_description, mft_date, color, initials
@@ -757,89 +983,103 @@ app.post("/api/products", requireUser, requirePermission("catalog:write"), requi
        RETURNING id, name, sku, category, cost_price_cents, selling_price_cents,
                  wholesale_price_cents, wholesale_quantity, stock, reorder_level, supplier_id,
                  expiry_date, production_description, mft_date::text AS mft_date, color, initials`,
-      [
-        id, product.name, sku, product.category, product.costPriceCents,
-        product.sellingPriceCents, product.wholesalePriceCents, product.wholesaleQuantity,
-        product.stock, product.reorderLevel, product.supplierId, product.expiryDate,
-        product.productionDescription, product.mftDate, "#e8e8ef", initials,
-      ],
-    );
-    await client.query(
-      `INSERT INTO store_inventory (store_id, product_id, stock, reorder_level)
+        [
+          id,
+          product.name,
+          sku,
+          product.category,
+          product.costPriceCents,
+          product.sellingPriceCents,
+          product.wholesalePriceCents,
+          product.wholesaleQuantity,
+          product.stock,
+          product.reorderLevel,
+          product.supplierId,
+          product.expiryDate,
+          product.productionDescription,
+          product.mftDate,
+          "#e8e8ef",
+          initials,
+        ],
+      );
+      await client.query(
+        `INSERT INTO store_inventory (store_id, product_id, stock, reorder_level)
        SELECT s.id, $2, CASE WHEN s.id = $1 THEN $3 ELSE 0 END, $4
        FROM stores s WHERE s.active = TRUE
        ON CONFLICT DO NOTHING`,
-      [targetStoreId, rows[0].id, product.stock, product.reorderLevel],
-    );
-    if (promotion.discountType) {
-      await client.query(
-        `INSERT INTO store_promotions (store_id, product_id, discount_type, discount_value, starts_at, ends_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          targetStoreId, rows[0].id, promotion.discountType, promotion.discountValueCents,
-          promotion.startsAt, promotion.endsAt,
-        ],
+        [targetStoreId, rows[0].id, product.stock, product.reorderLevel],
       );
-    }
-    if (product.stock > 0) {
-      await client.query(
-        `INSERT INTO stock_movements (store_id, product_id, user_id, quantity, reason)
-         VALUES ($1, $2, $3, $4, 'Opening stock')`,
-        [targetStoreId, rows[0].id, request.user.id, product.stock],
-      );
-    }
-    const supplierResult = product.supplierId
-      ? await client.query("SELECT name FROM suppliers WHERE id = $1", [product.supplierId])
-      : { rows: [] };
-    await client.query("COMMIT");
-    response.status(201).json({
-      product: productResponse({
-        ...rows[0],
-        stock: product.stock,
-        reorder_level: product.reorderLevel,
-        discount_type: promotion.discountType,
-        discount_value: promotion.discountValueCents,
-        discount_starts_at: promotion.startsAt,
-        discount_ends_at: promotion.endsAt,
-        supplier_name: supplierResult.rows[0]?.name ?? "",
-      }),
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (skuConflict(error)) {
-      throw apiError(409, "That SKU is already assigned to another product.", "SKU_ALREADY_EXISTS");
-    }
-    if (error.code === "23503" && error.constraint === "products_supplier_id_fkey") {
-      throw apiError(400, "Select a supplier from the supplier list.", "INVALID_SUPPLIER");
-    }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
 
-app.put("/api/products/:id", requireUser, requirePermission("catalog:write"), requireStore, asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid product ID.", "INVALID_PRODUCT_ID");
-  }
-  const product = validateProductInput(request.body, { includeStock: false });
-  const hasPromotionFields = [
-    "discountType",
-    "discountValue",
-    "discountStartsAt",
-    "discountEndsAt",
-  ].some((field) => Object.hasOwn(request.body, field));
-  const promotion = hasPromotionFields
-    ? validatePromotionInput(request.body, product.sellingPriceCents)
-    : null;
-  product.category = await resolveCategoryName(product.category);
-  const initials = product.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows } = await client.query(
-      `UPDATE products
+      if (product.stock > 0) {
+        await client.query(
+          `INSERT INTO stock_movements (store_id, product_id, user_id, quantity, reason)
+         VALUES ($1, $2, $3, $4, 'Opening stock')`,
+          [targetStoreId, rows[0].id, request.user.id, product.stock],
+        );
+      }
+      const supplierResult = product.supplierId
+        ? await client.query("SELECT name FROM suppliers WHERE id = $1", [
+            product.supplierId,
+          ])
+        : { rows: [] };
+      await client.query("COMMIT");
+      response.status(201).json({
+        product: productResponse({
+          ...rows[0],
+          stock: product.stock,
+          reorder_level: product.reorderLevel,
+          supplier_name: supplierResult.rows[0]?.name ?? "",
+        }),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (skuConflict(error)) {
+        throw apiError(
+          409,
+          "That SKU is already assigned to another product.",
+          "SKU_ALREADY_EXISTS",
+        );
+      }
+      if (
+        error.code === "23503" &&
+        error.constraint === "products_supplier_id_fkey"
+      ) {
+        throw apiError(
+          400,
+          "Select a supplier from the supplier list.",
+          "INVALID_SUPPLIER",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+app.put(
+  "/api/products/:id",
+  requireUser,
+  requirePermission("catalog:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid product ID.", "INVALID_PRODUCT_ID");
+    }
+    const product = validateProductInput(request.body, { includeStock: false });
+    product.category = await resolveCategoryName(product.category);
+    const initials = product.name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `UPDATE products
        SET name = $1, sku = $2, category = $3, cost_price_cents = $4,
            selling_price_cents = $5, wholesale_price_cents = $6, wholesale_quantity = $7,
            supplier_id = $8, expiry_date = $9, production_description = $10,
@@ -848,159 +1088,189 @@ app.put("/api/products/:id", requireUser, requirePermission("catalog:write"), re
        RETURNING id, name, sku, category, cost_price_cents, selling_price_cents,
                  wholesale_price_cents, wholesale_quantity, stock, reorder_level, supplier_id,
                  expiry_date, production_description, mft_date::text AS mft_date, color, initials`,
-      [
-        product.name, product.sku, product.category, product.costPriceCents,
-        product.sellingPriceCents, product.wholesalePriceCents, product.wholesaleQuantity,
-        product.supplierId, product.expiryDate, product.productionDescription,
-        product.mftDate, initials, id,
-      ],
-    );
-    if (!rows[0]) throw apiError(404, "Product not found.", "PRODUCT_NOT_FOUND");
-    await client.query(
-      `INSERT INTO store_inventory (store_id, product_id, reorder_level)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (store_id, product_id) DO UPDATE SET reorder_level = EXCLUDED.reorder_level`,
-      [request.storeId, id, product.reorderLevel],
-    );
-    if (promotion?.discountType) {
-      await client.query(
-        `INSERT INTO store_promotions (store_id, product_id, discount_type, discount_value, starts_at, ends_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (store_id, product_id) DO UPDATE
-         SET discount_type = EXCLUDED.discount_type, discount_value = EXCLUDED.discount_value,
-             starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at`,
         [
-          request.storeId, id, promotion.discountType, promotion.discountValueCents,
-          promotion.startsAt, promotion.endsAt,
+          product.name,
+          product.sku,
+          product.category,
+          product.costPriceCents,
+          product.sellingPriceCents,
+          product.wholesalePriceCents,
+          product.wholesaleQuantity,
+          product.supplierId,
+          product.expiryDate,
+          product.productionDescription,
+          product.mftDate,
+          initials,
+          id,
         ],
       );
-    } else if (promotion) {
+      if (!rows[0])
+        throw apiError(404, "Product not found.", "PRODUCT_NOT_FOUND");
       await client.query(
-        "DELETE FROM store_promotions WHERE store_id = $1 AND product_id = $2",
+        `INSERT INTO store_inventory (store_id, product_id, reorder_level)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (store_id, product_id) DO UPDATE SET reorder_level = EXCLUDED.reorder_level`,
+        [request.storeId, id, product.reorderLevel],
+      );
+      const { rows: storeRows } = await client.query(
+        `SELECT i.stock, i.reorder_level
+       FROM store_inventory i
+       WHERE i.store_id = $1 AND i.product_id = $2`,
         [request.storeId, id],
       );
+      const supplierResult = product.supplierId
+        ? await client.query("SELECT name FROM suppliers WHERE id = $1", [
+            product.supplierId,
+          ])
+        : { rows: [] };
+      await client.query("COMMIT");
+      response.json({
+        product: productResponse({
+          ...rows[0],
+          ...storeRows[0],
+          supplier_name: supplierResult.rows[0]?.name ?? "",
+        }),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (skuConflict(error)) {
+        throw apiError(
+          409,
+          "That SKU is already assigned to another product.",
+          "SKU_ALREADY_EXISTS",
+        );
+      }
+      if (
+        error.code === "23503" &&
+        error.constraint === "products_supplier_id_fkey"
+      ) {
+        throw apiError(
+          400,
+          "Select a supplier from the supplier list.",
+          "INVALID_SUPPLIER",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
     }
-    const { rows: storeRows } = await client.query(
-      `SELECT i.stock, i.reorder_level, pr.discount_type, pr.discount_value,
-              pr.starts_at::text AS discount_starts_at, pr.ends_at::text AS discount_ends_at
-       FROM store_inventory i
-       LEFT JOIN store_promotions pr ON pr.store_id = i.store_id AND pr.product_id = i.product_id
-       WHERE i.store_id = $1 AND i.product_id = $2`,
-      [request.storeId, id],
-    );
-    const supplierResult = product.supplierId
-      ? await client.query("SELECT name FROM suppliers WHERE id = $1", [product.supplierId])
-      : { rows: [] };
-    await client.query("COMMIT");
-    response.json({
-      product: productResponse({
-        ...rows[0], ...storeRows[0], supplier_name: supplierResult.rows[0]?.name ?? "",
-      }),
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (skuConflict(error)) {
-      throw apiError(409, "That SKU is already assigned to another product.", "SKU_ALREADY_EXISTS");
-    }
-    if (error.code === "23503" && error.constraint === "products_supplier_id_fkey") {
-      throw apiError(400, "Select a supplier from the supplier list.", "INVALID_SUPPLIER");
-    }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+  }),
+);
 
-app.post("/api/products/:id/stock-adjustments", requireUser, requirePermission("inventory:write"), requireStore, asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const { quantity, reason } = request.body ?? {};
-  const cleanReason = typeof reason === "string" ? reason.trim() : "";
-  if (
-    !Number.isSafeInteger(id) ||
-    id < 1 ||
-    !Number.isInteger(quantity) ||
-    quantity === 0 ||
-    Math.abs(quantity) > 1_000_000 ||
-    !cleanReason ||
-    cleanReason.length > 160
-  ) {
-    throw apiError(400, "Enter a non-zero stock adjustment and a reason.", "INVALID_STOCK_ADJUSTMENT");
-  }
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: inventoryRows } = await client.query(
-      `UPDATE store_inventory
+app.post(
+  "/api/products/:id/stock-adjustments",
+  requireUser,
+  requirePermission("inventory:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    const { quantity, reason } = request.body ?? {};
+    const cleanReason = typeof reason === "string" ? reason.trim() : "";
+    if (
+      !Number.isSafeInteger(id) ||
+      id < 1 ||
+      !Number.isInteger(quantity) ||
+      quantity === 0 ||
+      Math.abs(quantity) > 1_000_000 ||
+      !cleanReason ||
+      cleanReason.length > 160
+    ) {
+      throw apiError(
+        400,
+        "Enter a non-zero stock adjustment and a reason.",
+        "INVALID_STOCK_ADJUSTMENT",
+      );
+    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: inventoryRows } = await client.query(
+        `UPDATE store_inventory
        SET stock = stock + $1
        WHERE store_id = $2 AND product_id = $3 AND stock + $1 >= 0
        RETURNING stock, reorder_level`,
-      [quantity, request.storeId, id],
-    );
-    if (!inventoryRows[0]) {
-      const { rows: productRows } = await client.query(
-        `SELECT p.id, i.stock FROM products p
+        [quantity, request.storeId, id],
+      );
+      if (!inventoryRows[0]) {
+        const { rows: productRows } = await client.query(
+          `SELECT p.id, i.stock FROM products p
          LEFT JOIN store_inventory i ON i.product_id = p.id AND i.store_id = $2
          WHERE p.id = $1 AND p.active = TRUE`,
-        [id, request.storeId],
-      );
-      if (!productRows[0] || productRows[0].stock === null) {
-        throw apiError(404, "Product not found in this store.", "PRODUCT_NOT_FOUND");
+          [id, request.storeId],
+        );
+        if (!productRows[0] || productRows[0].stock === null) {
+          throw apiError(
+            404,
+            "Product not found in this store.",
+            "PRODUCT_NOT_FOUND",
+          );
+        }
+        throw apiError(
+          409,
+          "This adjustment would take stock below zero.",
+          "INSUFFICIENT_STOCK",
+        );
       }
-      throw apiError(409, "This adjustment would take stock below zero.", "INSUFFICIENT_STOCK");
-    }
-    await client.query(
-      `INSERT INTO stock_movements (store_id, product_id, user_id, quantity, reason)
+      await client.query(
+        `INSERT INTO stock_movements (store_id, product_id, user_id, quantity, reason)
        VALUES ($1, $2, $3, $4, $5)`,
-      [request.storeId, id, request.user.id, quantity, cleanReason],
-    );
-    const { rows } = await client.query(
-      `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
+        [request.storeId, id, request.user.id, quantity, cleanReason],
+      );
+      const { rows } = await client.query(
+        `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
               p.wholesale_price_cents, p.wholesale_quantity,
               i.stock, i.reorder_level, p.supplier_id, s.name AS supplier_name,
-              p.expiry_date, p.color, p.initials, pr.discount_type, pr.discount_value,
-              pr.starts_at::text AS discount_starts_at, pr.ends_at::text AS discount_ends_at
+              p.expiry_date, p.color, p.initials
        FROM products p
        JOIN store_inventory i ON i.product_id = p.id AND i.store_id = $2
        LEFT JOIN suppliers s ON s.id = p.supplier_id
-       LEFT JOIN store_promotions pr ON pr.product_id = p.id AND pr.store_id = $2
        WHERE p.id = $1`,
-      [id, request.storeId],
-    );
-    await client.query("COMMIT");
-    response.json({
-      product: productResponse(rows[0]),
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+        [id, request.storeId],
+      );
+      await client.query("COMMIT");
+      response.json({
+        product: productResponse(rows[0]),
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
 
-app.get("/api/inventory/report", requireUser, requirePermission("inventory:report"), requireStore, asyncRoute(async (request, response) => {
-  const days = request.query.expiringWithinDays === undefined
-    ? 30
-    : Number(request.query.expiringWithinDays);
-  if (!Number.isInteger(days) || days < 1 || days > 365) {
-    throw apiError(400, "Expiry report window must be between 1 and 365 days.", "INVALID_REPORT_WINDOW");
-  }
-  const { rows: products } = await pool.query(
-    `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
+app.get(
+  "/api/inventory/report",
+  requireUser,
+  requirePermission("inventory:report"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const days =
+      request.query.expiringWithinDays === undefined
+        ? 30
+        : Number(request.query.expiringWithinDays);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      throw apiError(
+        400,
+        "Expiry report window must be between 1 and 365 days.",
+        "INVALID_REPORT_WINDOW",
+      );
+    }
+    const { rows: products } = await pool.query(
+      `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
             p.wholesale_price_cents, p.wholesale_quantity,
-            i.stock, i.reorder_level, pr.discount_type, pr.discount_value,
-            pr.starts_at::text AS discount_starts_at, pr.ends_at::text AS discount_ends_at,
+            i.stock, i.reorder_level,
             p.supplier_id, s.name AS supplier_name, p.expiry_date, p.color, p.initials
      FROM products p
      JOIN store_inventory i ON i.product_id = p.id AND i.store_id = $1
-     LEFT JOIN store_promotions pr ON pr.product_id = p.id AND pr.store_id = $1
      LEFT JOIN suppliers s ON s.id = p.supplier_id
      WHERE p.active = TRUE
      ORDER BY p.name`,
-    [request.storeId],
-  );
-  const { rows: movements } = await pool.query(
-    `SELECT sm.id, sm.product_id, p.name AS product_name, p.sku, sm.user_id,
+      [request.storeId],
+    );
+    const { rows: movements } = await pool.query(
+      `SELECT sm.id, sm.product_id, p.name AS product_name, p.sku, sm.user_id,
             u.name AS user_name, sm.quantity, sm.reason, sm.created_at
      FROM stock_movements sm
      JOIN products p ON p.id = sm.product_id
@@ -1008,107 +1278,191 @@ app.get("/api/inventory/report", requireUser, requirePermission("inventory:repor
      WHERE sm.store_id = $1
      ORDER BY sm.created_at DESC
      LIMIT 100`,
-    [request.storeId],
-  );
-  const mappedProducts = products.map(productResponse);
-  const today = new Date().toISOString().slice(0, 10);
-  const expiresBy = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
-  response.json({
-    report: {
-      generatedAt: Date.now(),
-      expiringWithinDays: days,
-      summary: {
-        productCount: mappedProducts.length,
-        totalUnits: mappedProducts.reduce((sum, product) => sum + product.stock, 0),
-        lowStockCount: mappedProducts.filter((product) => product.stock > 0 && product.stock <= product.reorderLevel).length,
-        outOfStockCount: mappedProducts.filter((product) => product.stock === 0).length,
-        expiredCount: mappedProducts.filter((product) => product.expiryDate && product.expiryDate < today).length,
-        expiringSoonCount: mappedProducts.filter((product) => product.expiryDate && product.expiryDate >= today && product.expiryDate <= expiresBy).length,
-        costValue: mappedProducts.reduce((sum, product) => sum + product.costPrice * product.stock, 0),
-        retailValue: mappedProducts.reduce((sum, product) => sum + product.price * product.stock, 0),
+      [request.storeId],
+    );
+    const mappedProducts = products.map(productResponse);
+    const today = new Date().toISOString().slice(0, 10);
+    const expiresBy = new Date(Date.now() + days * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    response.json({
+      report: {
+        generatedAt: Date.now(),
+        expiringWithinDays: days,
+        summary: {
+          productCount: mappedProducts.length,
+          totalUnits: mappedProducts.reduce(
+            (sum, product) => sum + product.stock,
+            0,
+          ),
+          lowStockCount: mappedProducts.filter(
+            (product) =>
+              product.stock > 0 && product.stock <= product.reorderLevel,
+          ).length,
+          outOfStockCount: mappedProducts.filter(
+            (product) => product.stock === 0,
+          ).length,
+          expiredCount: mappedProducts.filter(
+            (product) => product.expiryDate && product.expiryDate < today,
+          ).length,
+          expiringSoonCount: mappedProducts.filter(
+            (product) =>
+              product.expiryDate &&
+              product.expiryDate >= today &&
+              product.expiryDate <= expiresBy,
+          ).length,
+          costValue: mappedProducts.reduce(
+            (sum, product) => sum + product.costPrice * product.stock,
+            0,
+          ),
+          retailValue: mappedProducts.reduce(
+            (sum, product) => sum + product.price * product.stock,
+            0,
+          ),
+        },
+        lowStock: mappedProducts.filter(
+          (product) => product.stock <= product.reorderLevel,
+        ),
+        expiring: mappedProducts.filter(
+          (product) => product.expiryDate && product.expiryDate <= expiresBy,
+        ),
+        movements: movements.map((movement) => ({
+          id: movement.id,
+          productId: movement.product_id,
+          productName: movement.product_name,
+          sku: movement.sku,
+          userName: movement.user_name,
+          quantity: movement.quantity,
+          reason: movement.reason,
+          date: new Date(movement.created_at).getTime(),
+        })),
       },
-      lowStock: mappedProducts.filter((product) => product.stock <= product.reorderLevel),
-      expiring: mappedProducts.filter((product) => product.expiryDate && product.expiryDate <= expiresBy),
-      movements: movements.map((movement) => ({
-        id: movement.id,
-        productId: movement.product_id,
-        productName: movement.product_name,
-        sku: movement.sku,
-        userName: movement.user_name,
-        quantity: movement.quantity,
-        reason: movement.reason,
-        date: new Date(movement.created_at).getTime(),
-      })),
-    },
-  });
-}));
+    });
+  }),
+);
 
-app.get("/api/customers", requireUser, requirePermission("customers:read"), asyncRoute(async (request, response) => {
-  const { rows } = await pool.query(
-    `SELECT id, name, phone, email, notes, created_at
-     FROM customers
+app.get(
+  "/api/customers",
+  requireUser,
+  requirePermission("customers:read"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const { rows } = await pool.query(
+      `SELECT id, name, phone, email, notes, created_at
+     FROM customers c
+     JOIN customer_stores cs ON cs.customer_id = c.id AND cs.store_id = $1
      ORDER BY name`,
-  );
-  response.json({ customers: rows.map(customerResponse) });
-}));
+      [request.storeId],
+    );
+    response.json({ customers: rows.map(customerResponse) });
+  }),
+);
 
-app.post("/api/customers", requireUser, requirePermission("customers:write"), asyncRoute(async (request, response) => {
-  const customer = validateCustomerInput(request.body);
-  const { rows } = await pool.query(
-    `INSERT INTO customers (name, phone, email, notes)
+app.post(
+  "/api/customers",
+  requireUser,
+  requirePermission("customers:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const customer = validateCustomerInput(request.body);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `INSERT INTO customers (name, phone, email, notes)
      VALUES ($1, $2, $3, $4)
      RETURNING id, name, phone, email, notes, created_at`,
-    [customer.name, customer.phone, customer.email, customer.notes],
-  );
-  response.status(201).json({ customer: customerResponse(rows[0]) });
-}));
+        [customer.name, customer.phone, customer.email, customer.notes],
+      );
+      await client.query(
+        "INSERT INTO customer_stores (customer_id, store_id) VALUES ($1, $2)",
+        [rows[0].id, request.storeId],
+      );
+      await client.query("COMMIT");
+      response.status(201).json({ customer: customerResponse(rows[0]) });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
 
-app.put("/api/customers/:id", requireUser, requirePermission("customers:write"), asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid customer ID.", "INVALID_CUSTOMER_ID");
-  }
-  const customer = validateCustomerInput(request.body);
-  const { rows } = await pool.query(
-    `UPDATE customers
+app.put(
+  "/api/customers/:id",
+  requireUser,
+  requirePermission("customers:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid customer ID.", "INVALID_CUSTOMER_ID");
+    }
+    const customer = validateCustomerInput(request.body);
+    const { rows } = await pool.query(
+      `UPDATE customers
      SET name = $1, phone = $2, email = $3, notes = $4
-     WHERE id = $5
+     WHERE id = $5 AND EXISTS (
+       SELECT 1 FROM customer_stores cs
+       WHERE cs.customer_id = customers.id AND cs.store_id = $6
+     )
      RETURNING id, name, phone, email, notes, created_at`,
-    [customer.name, customer.phone, customer.email, customer.notes, id],
-  );
-  if (!rows[0]) throw apiError(404, "Customer not found.", "CUSTOMER_NOT_FOUND");
-  response.json({ customer: customerResponse(rows[0]) });
-}));
+      [customer.name, customer.phone, customer.email, customer.notes, id, request.storeId],
+    );
+    if (!rows[0])
+      throw apiError(404, "Customer not found.", "CUSTOMER_NOT_FOUND");
+    response.json({ customer: customerResponse(rows[0]) });
+  }),
+);
 
-app.get("/api/customers/:id/history", requireUser, requirePermission("customers:read"), requireStore, asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid customer ID.", "INVALID_CUSTOMER_ID");
-  }
-  const page = request.query.page === undefined ? 1 : Number(request.query.page);
-  const pageSize = request.query.pageSize === undefined
-    ? 50
-    : Number(request.query.pageSize);
-  if (
-    !Number.isSafeInteger(page) || page < 1 ||
-    !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100 ||
-    !Number.isSafeInteger((page - 1) * pageSize)
-  ) {
-    throw apiError(400, "Invalid customer history page.", "INVALID_CUSTOMER_HISTORY_PAGE");
-  }
-  const { rows: customerRows } = await pool.query(
-    "SELECT id, name, phone, email, notes, created_at FROM customers WHERE id = $1",
-    [id],
-  );
-  if (!customerRows[0]) throw apiError(404, "Customer not found.", "CUSTOMER_NOT_FOUND");
-  const cashierScoped = request.user.role === "cashier";
-  const historyParams = cashierScoped
-    ? [request.storeId, id, request.user.id]
-    : [request.storeId, id];
-  const historyWhere = `s.store_id = $1 AND s.customer_id = $2${cashierScoped ? " AND s.cashier_id = $3" : ""}`;
-  const [{ rows: saleRows }, { rows: countRows }] = await Promise.all([
-    pool.query(
-    `SELECT s.id, s.method, s.cash_received_cents, s.mobile_money_amount_cents,
+app.get(
+  "/api/customers/:id/history",
+  requireUser,
+  requirePermission("customers:read"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid customer ID.", "INVALID_CUSTOMER_ID");
+    }
+    const page =
+      request.query.page === undefined ? 1 : Number(request.query.page);
+    const pageSize =
+      request.query.pageSize === undefined
+        ? 50
+        : Number(request.query.pageSize);
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 100 ||
+      !Number.isSafeInteger((page - 1) * pageSize)
+    ) {
+      throw apiError(
+        400,
+        "Invalid customer history page.",
+        "INVALID_CUSTOMER_HISTORY_PAGE",
+      );
+    }
+    const { rows: customerRows } = await pool.query(
+      `SELECT c.id, c.name, c.phone, c.email, c.notes, c.created_at
+       FROM customers c
+       JOIN customer_stores cs ON cs.customer_id = c.id AND cs.store_id = $2
+       WHERE c.id = $1`,
+      [id, request.storeId],
+    );
+    if (!customerRows[0])
+      throw apiError(404, "Customer not found.", "CUSTOMER_NOT_FOUND");
+    const cashierScoped = request.user.role === "cashier";
+    const historyParams = cashierScoped
+      ? [request.storeId, id, request.user.id]
+      : [request.storeId, id];
+    const historyWhere = `s.store_id = $1 AND s.customer_id = $2${cashierScoped ? " AND s.cashier_id = $3" : ""}`;
+    const [{ rows: saleRows }, { rows: countRows }] = await Promise.all([
+      pool.query(
+        `SELECT s.id, s.method, s.cash_received_cents, s.mobile_money_amount_cents,
             s.item_count, s.subtotal_cents,
             s.total_cents, s.created_at,
             COALESCE(
@@ -1125,174 +1479,235 @@ app.get("/api/customers/:id/history", requireUser, requirePermission("customers:
      GROUP BY s.id
      ORDER BY s.created_at DESC
      LIMIT $${historyParams.length + 1} OFFSET $${historyParams.length + 2}`,
-    [...historyParams, pageSize, (page - 1) * pageSize],
-    ),
-    pool.query(
-      `SELECT COUNT(*)::text AS total
+        [...historyParams, pageSize, (page - 1) * pageSize],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::text AS total
        FROM sales s
        WHERE ${historyWhere}`,
-      historyParams,
-    ),
-  ]);
-  response.json({
-    customer: customerResponse(customerRows[0]),
-    page,
-    pageSize,
-    total: Number(countRows[0].total),
-    sales: saleRows.map((sale) => ({
-      id: `CP-${String(sale.id).padStart(6, "0")}`,
-      method: sale.method,
-      itemCount: sale.item_count,
-      subtotal: Number(sale.subtotal_cents) / 100,
-      total: Number(sale.total_cents) / 100,
-      date: new Date(sale.created_at).getTime(),
-      items: sale.items.map((item) => ({
-        ...item,
-        unitPrice: Number(item.unitPriceCents) / 100,
-        lineTotal: Number(item.unitPriceCents) / 100 * item.quantity,
+        historyParams,
+      ),
+    ]);
+    response.json({
+      customer: customerResponse(customerRows[0]),
+      page,
+      pageSize,
+      total: Number(countRows[0].total),
+      sales: saleRows.map((sale) => ({
+        id: `CP-${String(sale.id).padStart(6, "0")}`,
+        method: sale.method,
+        itemCount: sale.item_count,
+        subtotal: Number(sale.subtotal_cents) / 100,
+        total: Number(sale.total_cents) / 100,
+        date: new Date(sale.created_at).getTime(),
+        items: sale.items.map((item) => ({
+          ...item,
+          unitPrice: Number(item.unitPriceCents) / 100,
+          lineTotal: (Number(item.unitPriceCents) / 100) * item.quantity,
+        })),
       })),
-    })),
-  });
-}));
+    });
+  }),
+);
 
-app.get("/api/sales", requireUser, requireStore, asyncRoute(async (request, response) => {
-  const search = typeof request.query.search === "string" ? request.query.search.trim() : "";
-  if (search.length > 120) {
-    throw apiError(400, "Transaction search must be 120 characters or fewer.", "INVALID_SALE_SEARCH");
-  }
-  const page = request.query.page === undefined ? 1 : Number(request.query.page);
-  const pageSize = request.query.pageSize === undefined
-    ? 50
-    : Number(request.query.pageSize);
-  const dateFrom = request.query.dateFrom === undefined ? "" : request.query.dateFrom;
-  const dateTo = request.query.dateTo === undefined ? "" : request.query.dateTo;
-  if (
-    (dateFrom && !isValidDateOnly(dateFrom)) ||
-    (dateTo && !isValidDateOnly(dateTo)) ||
-    (dateFrom && dateTo && dateFrom > dateTo)
-  ) {
-    throw apiError(400, "Invalid sales date range.", "INVALID_SALES_DATE_RANGE");
-  }
-  if (
-    !Number.isSafeInteger(page) || page < 1 ||
-    !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100
-  ) {
-    throw apiError(400, "Invalid sales page or page size.", "INVALID_SALES_PAGE");
-  }
-  const offset = (page - 1) * pageSize;
-  if (!Number.isSafeInteger(offset)) {
-    throw apiError(400, "Invalid sales page or page size.", "INVALID_SALES_PAGE");
-  }
-  const query = salesQueryFor(
-    request.user,
-    request.storeId,
-    search,
-    pageSize,
-    offset,
-    dateFrom,
-    dateTo,
-  );
-  const [{ rows }, { rows: countRows }] = await Promise.all([
-    pool.query(query.sql, query.params),
-    pool.query(query.countSql, query.countParams),
-  ]);
-  response.json({
-    page,
-    pageSize,
-    total: Number(countRows[0].total),
-    sales: rows.map((sale) => ({
-      id: `CP-${String(sale.id).padStart(6, "0")}`,
-      items: sale.item_count,
-      total: Number(sale.total_cents) / 100,
-      date: new Date(sale.created_at).getTime(),
-      method: sale.method,
-      cashReceived: sale.cash_received_cents === null
-        ? null
-        : Number(sale.cash_received_cents) / 100,
-      change: sale.cash_received_cents === null
-        ? 0
-        : Math.max(
-            0,
-            Number(sale.cash_received_cents) - Number(sale.total_cents),
-          ) / 100,
-      mobileMoneyAmount: sale.mobile_money_amount_cents === null
-        ? null
-        : Number(sale.mobile_money_amount_cents) / 100,
-      cashierId: sale.cashier_id,
-      cashierName: sale.cashier_name,
-      customerId: sale.customer_id,
-      customerName: sale.customer_name ?? "Walk-in customer",
-    })),
-  });
-}));
+app.get(
+  "/api/sales",
+  requireUser,
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const search =
+      typeof request.query.search === "string"
+        ? request.query.search.trim()
+        : "";
+    if (search.length > 120) {
+      throw apiError(
+        400,
+        "Transaction search must be 120 characters or fewer.",
+        "INVALID_SALE_SEARCH",
+      );
+    }
+    const page =
+      request.query.page === undefined ? 1 : Number(request.query.page);
+    const pageSize =
+      request.query.pageSize === undefined
+        ? 50
+        : Number(request.query.pageSize);
+    const dateFrom =
+      request.query.dateFrom === undefined ? "" : request.query.dateFrom;
+    const dateTo =
+      request.query.dateTo === undefined ? "" : request.query.dateTo;
+    if (
+      (dateFrom && !isValidDateOnly(dateFrom)) ||
+      (dateTo && !isValidDateOnly(dateTo)) ||
+      (dateFrom && dateTo && dateFrom > dateTo)
+    ) {
+      throw apiError(
+        400,
+        "Invalid sales date range.",
+        "INVALID_SALES_DATE_RANGE",
+      );
+    }
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 100
+    ) {
+      throw apiError(
+        400,
+        "Invalid sales page or page size.",
+        "INVALID_SALES_PAGE",
+      );
+    }
+    const offset = (page - 1) * pageSize;
+    if (!Number.isSafeInteger(offset)) {
+      throw apiError(
+        400,
+        "Invalid sales page or page size.",
+        "INVALID_SALES_PAGE",
+      );
+    }
+    const query = salesQueryFor(
+      request.user,
+      request.storeId,
+      search,
+      pageSize,
+      offset,
+      dateFrom,
+      dateTo,
+    );
+    const [{ rows }, { rows: countRows }] = await Promise.all([
+      pool.query(query.sql, query.params),
+      pool.query(query.countSql, query.countParams),
+    ]);
+    response.json({
+      page,
+      pageSize,
+      total: Number(countRows[0].total),
+      sales: rows.map((sale) => ({
+        id: `CP-${String(sale.id).padStart(6, "0")}`,
+        items: sale.item_count,
+        total: Number(sale.total_cents) / 100,
+        date: new Date(sale.created_at).getTime(),
+        method: sale.method,
+        cashReceived:
+          sale.cash_received_cents === null
+            ? null
+            : Number(sale.cash_received_cents) / 100,
+        change:
+          sale.cash_received_cents === null
+            ? 0
+            : Math.max(
+                0,
+                Number(sale.cash_received_cents) - Number(sale.total_cents),
+              ) / 100,
+        mobileMoneyAmount:
+          sale.mobile_money_amount_cents === null
+            ? null
+            : Number(sale.mobile_money_amount_cents) / 100,
+        cashierId: sale.cashier_id,
+        cashierName: sale.cashier_name,
+        customerId: sale.customer_id,
+        customerName: sale.customer_name ?? "Walk-in customer",
+        firstProductName: sale.first_product_name ?? "",
+      })),
+    });
+  }),
+);
 
-app.get("/api/sales/summary", requireUser, requireStore, asyncRoute(async (request, response) => {
-  const start = request.query.start;
-  const end = request.query.end;
-  const startDate = typeof start === "string" ? new Date(start) : null;
-  const endDate = typeof end === "string" ? new Date(end) : null;
-  if (
-    !startDate || !endDate ||
-    !Number.isFinite(startDate.getTime()) ||
-    !Number.isFinite(endDate.getTime()) ||
-    endDate <= startDate ||
-    endDate.getTime() - startDate.getTime() > 48 * 60 * 60 * 1000
-  ) {
-    throw apiError(400, "A valid local-day start and end are required.", "INVALID_SALES_SUMMARY_RANGE");
-  }
-  const query = salesSummaryQueryFor(
-    request.user,
-    request.storeId,
-    startDate.toISOString(),
-    endDate.toISOString(),
-  );
-  const { rows } = await pool.query(query.sql, query.params);
-  response.json({
-    totalCount: Number(rows[0].total_count),
-    todayCount: Number(rows[0].today_count),
-    todayRevenue: Number(rows[0].today_total_cents) / 100,
-  });
-}));
+app.get(
+  "/api/sales/summary",
+  requireUser,
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const start = request.query.start;
+    const end = request.query.end;
+    const startDate = typeof start === "string" ? new Date(start) : null;
+    const endDate = typeof end === "string" ? new Date(end) : null;
+    if (
+      !startDate ||
+      !endDate ||
+      !Number.isFinite(startDate.getTime()) ||
+      !Number.isFinite(endDate.getTime()) ||
+      endDate <= startDate ||
+      endDate.getTime() - startDate.getTime() > 48 * 60 * 60 * 1000
+    ) {
+      throw apiError(
+        400,
+        "A valid local-day start and end are required.",
+        "INVALID_SALES_SUMMARY_RANGE",
+      );
+    }
+    const query = salesSummaryQueryFor(
+      request.user,
+      request.storeId,
+      startDate.toISOString(),
+      endDate.toISOString(),
+    );
+    const { rows } = await pool.query(query.sql, query.params);
+    response.json({
+      totalCount: Number(rows[0].total_count),
+      todayCount: Number(rows[0].today_count),
+      todayRevenue: Number(rows[0].today_total_cents) / 100,
+    });
+  }),
+);
 
-app.get("/api/dashboard/insights", requireUser, requireStore, asyncRoute(async (request, response) => {
-  const start = typeof request.query.start === "string" ? new Date(request.query.start) : null;
-  const end = typeof request.query.end === "string" ? new Date(request.query.end) : null;
-  if (
-    !start || !end ||
-    !Number.isFinite(start.getTime()) ||
-    !Number.isFinite(end.getTime()) ||
-    end <= start ||
-    end.getTime() - start.getTime() > 31 * 24 * 60 * 60 * 1000
-  ) {
-    throw apiError(400, "A valid dashboard date range is required.", "INVALID_DASHBOARD_RANGE");
-  }
-  if (!["owner", "manager", "cashier"].includes(request.user.role)) {
-    throw apiError(403, "Your role does not allow this action.", "FORBIDDEN");
-  }
+app.get(
+  "/api/dashboard/insights",
+  requireUser,
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const start =
+      typeof request.query.start === "string"
+        ? new Date(request.query.start)
+        : null;
+    const end =
+      typeof request.query.end === "string"
+        ? new Date(request.query.end)
+        : null;
+    if (
+      !start ||
+      !end ||
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime()) ||
+      end <= start ||
+      end.getTime() - start.getTime() > 31 * 24 * 60 * 60 * 1000
+    ) {
+      throw apiError(
+        400,
+        "A valid dashboard date range is required.",
+        "INVALID_DASHBOARD_RANGE",
+      );
+    }
+    if (!["owner", "manager", "cashier"].includes(request.user.role)) {
+      throw apiError(403, "Your role does not allow this action.", "FORBIDDEN");
+    }
 
-  const params = [request.storeId];
-  let where = "s.store_id = $1";
-  if (request.user.role === "cashier") {
-    params.push(request.user.id);
-    where += " AND s.cashier_id = $2";
-  }
-  params.push(start.toISOString(), end.toISOString());
-  const startParam = `$${params.length - 1}`;
-  const endParam = `$${params.length}`;
-  const rangeWhere = `${where} AND s.created_at >= ${startParam}::timestamptz AND s.created_at < ${endParam}::timestamptz`;
-  const [trendResult, bestSellerResult, paymentResult] = await Promise.all([
-    pool.query(
-      `SELECT TO_CHAR(DATE_TRUNC('day', s.created_at), 'YYYY-MM-DD') AS day,
+    const params = [request.storeId];
+    let where = "s.store_id = $1";
+    if (request.user.role === "cashier") {
+      params.push(request.user.id);
+      where += " AND s.cashier_id = $2";
+    }
+    params.push(start.toISOString(), end.toISOString());
+    const startParam = `$${params.length - 1}`;
+    const endParam = `$${params.length}`;
+    const rangeWhere = `${where} AND s.created_at >= ${startParam}::timestamptz AND s.created_at < ${endParam}::timestamptz`;
+    const [trendResult, bestSellerResult, paymentResult] = await Promise.all([
+      pool.query(
+        `SELECT TO_CHAR(DATE_TRUNC('day', s.created_at), 'YYYY-MM-DD') AS day,
               COUNT(*)::text AS count,
               COALESCE(SUM(s.total_cents), 0)::text AS revenue_cents
        FROM sales s
        WHERE ${rangeWhere}
        GROUP BY DATE_TRUNC('day', s.created_at)
        ORDER BY DATE_TRUNC('day', s.created_at)`,
-      params,
-    ),
-    pool.query(
-      `SELECT si.product_name AS name,
+        params,
+      ),
+      pool.query(
+        `SELECT si.product_name AS name,
               SUM(si.quantity)::text AS quantity,
               COALESCE(SUM(si.quantity * si.unit_price_cents), 0)::text AS revenue_cents
        FROM sales s
@@ -1301,67 +1716,87 @@ app.get("/api/dashboard/insights", requireUser, requireStore, asyncRoute(async (
        GROUP BY si.product_name
        ORDER BY SUM(si.quantity) DESC, SUM(si.quantity * si.unit_price_cents) DESC, si.product_name
        LIMIT 5`,
-      params,
-    ),
-    pool.query(
-      `SELECT s.method,
+        params,
+      ),
+      pool.query(
+        `SELECT s.method,
               COUNT(*)::text AS count,
               COALESCE(SUM(s.total_cents), 0)::text AS revenue_cents
        FROM sales s
        WHERE ${rangeWhere}
        GROUP BY s.method
        ORDER BY SUM(s.total_cents) DESC, s.method`,
-      params,
-    ),
-  ]);
-  response.json({
-    trend: trendResult.rows.map((row) => ({
-      day: row.day,
-      count: Number(row.count),
-      revenue: Number(row.revenue_cents) / 100,
-    })),
-    bestSellers: bestSellerResult.rows.map((row) => ({
-      name: row.name,
-      quantity: Number(row.quantity),
-      revenue: Number(row.revenue_cents) / 100,
-    })),
-    payments: paymentResult.rows.map((row) => ({
-      method: row.method,
-      count: Number(row.count),
-      revenue: Number(row.revenue_cents) / 100,
-    })),
-  });
-}));
+        params,
+      ),
+    ]);
+    response.json({
+      trend: trendResult.rows.map((row) => ({
+        day: row.day,
+        count: Number(row.count),
+        revenue: Number(row.revenue_cents) / 100,
+      })),
+      bestSellers: bestSellerResult.rows.map((row) => ({
+        name: row.name,
+        quantity: Number(row.quantity),
+        revenue: Number(row.revenue_cents) / 100,
+      })),
+      payments: paymentResult.rows.map((row) => ({
+        method: row.method,
+        count: Number(row.count),
+        revenue: Number(row.revenue_cents) / 100,
+      })),
+    });
+  }),
+);
 
-app.post("/api/sales/quote", requireUser, requirePermission("checkout"), requireStore, asyncRoute(async (request, response) => {
-  const quantities = saleQuantities(request.body?.items);
-  const ids = [...quantities.keys()];
-  const { rows: products } = await pool.query(
-    saleProductQuery(),
-    [ids, request.storeId],
-  );
-  const foundIds = new Set(products.map((product) => product.id));
-  const missingProductIds = ids.filter((id) => !foundIds.has(id));
-  const quote = calculateSaleQuote(products, quantities, request.user.role);
-  quote.available = quote.available && missingProductIds.length === 0;
-  quote.unavailableProductIds = missingProductIds;
-  response.json({
-    quote,
-  });
-}));
+app.post(
+  "/api/sales/quote",
+  requireUser,
+  requirePermission("checkout"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const quantities = saleQuantities(request.body?.items);
+    const ids = [...quantities.keys()];
+    const { rows: products } = await pool.query(saleProductQuery(), [
+      ids,
+      request.storeId,
+    ]);
+    const foundIds = new Set(products.map((product) => product.id));
+    const missingProductIds = ids.filter((id) => !foundIds.has(id));
+    const quote = calculateSaleQuote(products, quantities, request.user.role);
+    quote.available = quote.available && missingProductIds.length === 0;
+    quote.unavailableProductIds = missingProductIds;
+    response.json({
+      quote,
+    });
+  }),
+);
 
-app.post("/api/payments/paystack/initialize", requireUser, requirePermission("checkout"), asyncRoute(async () => {
-  throw apiError(410, "Only cash payments are accepted.", "CASH_ONLY");
-}));
+app.post(
+  "/api/payments/paystack/initialize",
+  requireUser,
+  requirePermission("checkout"),
+  asyncRoute(async () => {
+    throw apiError(410, "Only cash payments are accepted.", "CASH_ONLY");
+  }),
+);
 
-app.get("/api/sales/:id", requireUser, requireStore, asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid sale ID.", "INVALID_SALE_ID");
-  }
-  const { whereSql, params } = saleDetailQueryFor(request.user, id, request.storeId);
-  const { rows } = await pool.query(
-    `SELECT s.id, s.cashier_id, u.name AS cashier_name, s.customer_id, c.name AS customer_name,
+app.get(
+  "/api/sales/:id",
+  requireUser,
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid sale ID.", "INVALID_SALE_ID");
+    }
+    const { whereSql, params } = saleDetailQueryFor(
+      request.user,
+      id,
+      request.storeId,
+    );
+    const { rows } = await pool.query(
+      `SELECT s.id, s.cashier_id, u.name AS cashier_name, s.customer_id, c.name AS customer_name,
             s.method, s.cash_received_cents, s.mobile_money_amount_cents,
             s.item_count, s.subtotal_cents,
             s.total_cents, s.created_at,
@@ -1379,166 +1814,192 @@ app.get("/api/sales/:id", requireUser, requireStore, asyncRoute(async (request, 
      LEFT JOIN sale_items si ON si.sale_id = s.id
      WHERE ${whereSql}
      GROUP BY s.id, c.name, u.name`,
-    params,
-  );
-  const sale = rows[0];
-  if (!sale) throw apiError(404, "Transaction not found.", "SALE_NOT_FOUND");
-  response.json({
-    sale: {
-      id: `CP-${String(sale.id).padStart(6, "0")}`,
-      cashierId: sale.cashier_id,
-      cashierName: sale.cashier_name,
-      customerId: sale.customer_id,
-      customerName: sale.customer_name ?? "Walk-in customer",
-      method: sale.method,
-      cashReceived: sale.cash_received_cents === null
-        ? null
-        : Number(sale.cash_received_cents) / 100,
-      change: sale.cash_received_cents === null
-        ? 0
-        : Math.max(
-            0,
-            Number(sale.cash_received_cents) - Number(sale.total_cents),
-          ) / 100,
-      mobileMoneyAmount: sale.mobile_money_amount_cents === null
-        ? null
-        : Number(sale.mobile_money_amount_cents) / 100,
-      itemCount: sale.item_count,
-      items: sale.item_count,
-      subtotal: Number(sale.subtotal_cents) / 100,
-      total: Number(sale.total_cents) / 100,
-      date: new Date(sale.created_at).getTime(),
-      itemsDetail: sale.receipt_items.map((item) => {
-        const unitPriceCents = Number(item.unitPriceCents);
-        return {
-          productName: item.productName,
-          quantity: item.quantity,
-          unitPrice: unitPriceCents / 100,
-          lineTotal: unitPriceCents * item.quantity / 100,
-        };
-      }),
-    },
-  });
-}));
+      params,
+    );
+    const sale = rows[0];
+    if (!sale) throw apiError(404, "Transaction not found.", "SALE_NOT_FOUND");
+    response.json({
+      sale: {
+        id: `CP-${String(sale.id).padStart(6, "0")}`,
+        cashierId: sale.cashier_id,
+        cashierName: sale.cashier_name,
+        customerId: sale.customer_id,
+        customerName: sale.customer_name ?? "Walk-in customer",
+        method: sale.method,
+        cashReceived:
+          sale.cash_received_cents === null
+            ? null
+            : Number(sale.cash_received_cents) / 100,
+        change:
+          sale.cash_received_cents === null
+            ? 0
+            : Math.max(
+                0,
+                Number(sale.cash_received_cents) - Number(sale.total_cents),
+              ) / 100,
+        mobileMoneyAmount:
+          sale.mobile_money_amount_cents === null
+            ? null
+            : Number(sale.mobile_money_amount_cents) / 100,
+        itemCount: sale.item_count,
+        items: sale.item_count,
+        subtotal: Number(sale.subtotal_cents) / 100,
+        total: Number(sale.total_cents) / 100,
+        date: new Date(sale.created_at).getTime(),
+        itemsDetail: sale.receipt_items.map((item) => {
+          const unitPriceCents = Number(item.unitPriceCents);
+          return {
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: unitPriceCents / 100,
+            lineTotal: (unitPriceCents * item.quantity) / 100,
+          };
+        }),
+      },
+    });
+  }),
+);
 
-app.post("/api/sales", requireUser, requirePermission("checkout"), requireStore, asyncRoute(async (request, response) => {
-  const { items } = request.body ?? {};
-  const method = request.body?.method ?? "Cash";
-  const cashReceivedCents = request.body?.cashReceivedCents;
-  const expectedTotalCents = request.body?.expectedTotalCents;
-  const idempotencyKey = request.get("Idempotency-Key");
-  const customerId = customerIdFromInput(request.body?.customerId);
-  const quantities = saleQuantities(items);
-  if (
-    method !== "Cash" ||
-    !Number.isSafeInteger(expectedTotalCents) ||
-    expectedTotalCents < 0 ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey ?? "") ||
-    !Number.isSafeInteger(cashReceivedCents) ||
-    cashReceivedCents < 0 ||
-    cashReceivedCents > 2147483647
-  ) {
-    throw apiError(400, "Only cash payments are accepted. Enter the cash received and review the order.", "INVALID_SALE");
-  }
-  const normalizedItems = [...quantities.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([productId, quantity]) => ({ productId, quantity }));
-  const requestHash = createHash("sha256")
-    .update(JSON.stringify({
-      items: normalizedItems,
-      method,
-      cashReceivedCents,
-      customerId,
-      expectedTotalCents,
-    }))
-    .digest("hex");
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query(
-      "SELECT pg_advisory_xact_lock(hashtext($1))",
-      [`${request.user.id}:${request.storeId}:${idempotencyKey}`],
-    );
-    const { rows: previousRequests } = await client.query(
-      `SELECT request_hash, response
-       FROM checkout_idempotency
-       WHERE user_id = $1 AND store_id = $2 AND idempotency_key = $3`,
-      [request.user.id, request.storeId, idempotencyKey],
-    );
-    if (previousRequests[0]) {
-      if (previousRequests[0].request_hash !== requestHash) {
-        throw apiError(
-          409,
-          "This checkout key was already used for a different sale.",
-          "IDEMPOTENCY_KEY_REUSED",
-        );
-      }
-      if (!previousRequests[0].response) {
-        throw apiError(409, "This sale is still being processed. Retry shortly.", "SALE_IN_PROGRESS");
-      }
-      await client.query("COMMIT");
-      response.status(200).json(previousRequests[0].response);
-      return;
-    }
-    await client.query(
-      `INSERT INTO checkout_idempotency (
-         user_id, store_id, idempotency_key, request_hash
-       ) VALUES ($1, $2, $3, $4)`,
-      [request.user.id, request.storeId, idempotencyKey, requestHash],
-    );
-    let customer = null;
-    if (customerId !== null) {
-      const { rows } = await client.query(
-        "SELECT id, name FROM customers WHERE id = $1",
-        [customerId],
-      );
-      if (!rows[0]) throw apiError(404, "Customer not found.", "CUSTOMER_NOT_FOUND");
-      customer = rows[0];
-    }
-    const ids = [...quantities.keys()];
-    const { rows: products } = await client.query(
-      saleProductQuery(true),
-      [ids, request.storeId],
-    );
-    const foundIds = new Set(products.map((product) => product.id));
-    const missingProductIds = ids.filter((id) => !foundIds.has(id));
-    const quote = calculateSaleQuote(products, quantities, request.user.role);
-    quote.available = quote.available && missingProductIds.length === 0;
-    quote.unavailableProductIds = missingProductIds;
-    if (expectedTotalCents !== quote.totalCents) {
-      const error = apiError(
-        409,
-        "Prices changed while this order was being checked. Review the updated quote before continuing.",
-        "QUOTE_CHANGED",
-      );
-      error.quote = quote;
-      throw error;
-    }
-    if (!quote.available) {
-      const product = products.find(
-        (item) => item.stock < quantities.get(item.id),
-      );
-      const error = apiError(
-        409,
-        product
-          ? `${product.name} does not have enough stock to complete this sale.`
-          : "A product in this order is no longer available.",
-        "STOCK_CONFLICT",
-      );
-      error.quote = quote;
-      throw error;
-    }
-    const { subtotalCents, totalCents } = quote;
-    if (cashReceivedCents < totalCents) {
+app.post(
+  "/api/sales",
+  requireUser,
+  requirePermission("checkout"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const { items } = request.body ?? {};
+    const method = request.body?.method ?? "Cash";
+    const cashReceivedCents = request.body?.cashReceivedCents;
+    const expectedTotalCents = request.body?.expectedTotalCents;
+    const idempotencyKey = request.get("Idempotency-Key");
+    const customerId = customerIdFromInput(request.body?.customerId);
+    const quantities = saleQuantities(items);
+    if (
+      method !== "Cash" ||
+      !Number.isSafeInteger(expectedTotalCents) ||
+      expectedTotalCents < 0 ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        idempotencyKey ?? "",
+      ) ||
+      !Number.isSafeInteger(cashReceivedCents) ||
+      cashReceivedCents < 0 ||
+      cashReceivedCents > 2147483647
+    ) {
       throw apiError(
         400,
-        "Cash received must cover the total due.",
-        "INVALID_PAYMENT_AMOUNT",
+        "Only cash payments are accepted. Enter the cash received and review the order.",
+        "INVALID_SALE",
       );
     }
-    const itemCount = [...quantities.values()].reduce((sum, quantity) => sum + quantity, 0);
-    const { rows: saleRows } = await client.query(
-      `INSERT INTO sales (
+    const normalizedItems = [...quantities.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([productId, quantity]) => ({ productId, quantity }));
+    const requestHash = createHash("sha256")
+      .update(
+        JSON.stringify({
+          items: normalizedItems,
+          method,
+          cashReceivedCents,
+          customerId,
+          expectedTotalCents,
+        }),
+      )
+      .digest("hex");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `${request.user.id}:${request.storeId}:${idempotencyKey}`,
+      ]);
+      const { rows: previousRequests } = await client.query(
+        `SELECT request_hash, response
+       FROM checkout_idempotency
+       WHERE user_id = $1 AND store_id = $2 AND idempotency_key = $3`,
+        [request.user.id, request.storeId, idempotencyKey],
+      );
+      if (previousRequests[0]) {
+        if (previousRequests[0].request_hash !== requestHash) {
+          throw apiError(
+            409,
+            "This checkout key was already used for a different sale.",
+            "IDEMPOTENCY_KEY_REUSED",
+          );
+        }
+        if (!previousRequests[0].response) {
+          throw apiError(
+            409,
+            "This sale is still being processed. Retry shortly.",
+            "SALE_IN_PROGRESS",
+          );
+        }
+        await client.query("COMMIT");
+        response.status(200).json(previousRequests[0].response);
+        return;
+      }
+      await client.query(
+        `INSERT INTO checkout_idempotency (
+         user_id, store_id, idempotency_key, request_hash
+       ) VALUES ($1, $2, $3, $4)`,
+        [request.user.id, request.storeId, idempotencyKey, requestHash],
+      );
+      let customer = null;
+      if (customerId !== null) {
+        const { rows } = await client.query(
+          `SELECT c.id, c.name FROM customers c
+           JOIN customer_stores cs ON cs.customer_id = c.id AND cs.store_id = $2
+           WHERE c.id = $1`,
+          [customerId, request.storeId],
+        );
+        if (!rows[0])
+          throw apiError(404, "Customer not found.", "CUSTOMER_NOT_FOUND");
+        customer = rows[0];
+      }
+      const ids = [...quantities.keys()];
+      const { rows: products } = await client.query(saleProductQuery(true), [
+        ids,
+        request.storeId,
+      ]);
+      const foundIds = new Set(products.map((product) => product.id));
+      const missingProductIds = ids.filter((id) => !foundIds.has(id));
+      const quote = calculateSaleQuote(products, quantities, request.user.role);
+      quote.available = quote.available && missingProductIds.length === 0;
+      quote.unavailableProductIds = missingProductIds;
+      if (expectedTotalCents !== quote.totalCents) {
+        const error = apiError(
+          409,
+          "Prices changed while this order was being checked. Review the updated quote before continuing.",
+          "QUOTE_CHANGED",
+        );
+        error.quote = quote;
+        throw error;
+      }
+      if (!quote.available) {
+        const product = products.find(
+          (item) => item.stock < quantities.get(item.id),
+        );
+        const error = apiError(
+          409,
+          product
+            ? `${product.name} does not have enough stock to complete this sale.`
+            : "A product in this order is no longer available.",
+          "STOCK_CONFLICT",
+        );
+        error.quote = quote;
+        throw error;
+      }
+      const { subtotalCents, totalCents } = quote;
+      if (cashReceivedCents < totalCents) {
+        throw apiError(
+          400,
+          "Cash received must cover the total due.",
+          "INVALID_PAYMENT_AMOUNT",
+        );
+      }
+      const itemCount = [...quantities.values()].reduce(
+        (sum, quantity) => sum + quantity,
+        0,
+      );
+      const { rows: saleRows } = await client.query(
+        `INSERT INTO sales (
          store_id, cashier_id, customer_id, method, cash_received_cents,
          mobile_money_amount_cents, paystack_reference, item_count,
          subtotal_cents, total_cents
@@ -1546,116 +2007,130 @@ app.post("/api/sales", requireUser, requirePermission("checkout"), requireStore,
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, cashier_id, method, cash_received_cents,
                  mobile_money_amount_cents, item_count, total_cents, created_at`,
-      [
-        request.storeId,
-        request.user.id,
-        customerId,
-        method,
-        cashReceivedCents,
-        null,
-        null,
-        itemCount,
-        subtotalCents,
-        totalCents,
-      ],
-    );
-    const sale = saleRows[0];
-    const updatedProducts = [];
-    const receiptItems = [];
-    for (const product of products) {
-      const quantity = quantities.get(product.id);
-      const unitPriceCents = salePriceCents(product, quantity);
-      await client.query(
-        `INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_price_cents)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [sale.id, product.id, product.name, quantity, unitPriceCents],
+        [
+          request.storeId,
+          request.user.id,
+          customerId,
+          method,
+          cashReceivedCents,
+          null,
+          null,
+          itemCount,
+          subtotalCents,
+          totalCents,
+        ],
       );
-      receiptItems.push({
-        productName: product.name,
-        quantity,
-        unitPrice: unitPriceCents / 100,
-        lineTotal: unitPriceCents * quantity / 100,
-      });
-      await client.query(
-        `UPDATE store_inventory SET stock = stock - $1
+      const sale = saleRows[0];
+      const updatedProducts = [];
+      const receiptItems = [];
+      for (const product of products) {
+        const quantity = quantities.get(product.id);
+        const unitPriceCents = salePriceCents(product, quantity);
+        await client.query(
+          `INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_price_cents)
+         VALUES ($1, $2, $3, $4, $5)`,
+          [sale.id, product.id, product.name, quantity, unitPriceCents],
+        );
+        receiptItems.push({
+          productName: product.name,
+          quantity,
+          unitPrice: unitPriceCents / 100,
+          lineTotal: (unitPriceCents * quantity) / 100,
+        });
+        await client.query(
+          `UPDATE store_inventory SET stock = stock - $1
          WHERE product_id = $2 AND store_id = $3
          RETURNING product_id, stock, reorder_level`,
-        [quantity, product.id, request.storeId],
-      );
-      const { rows: updatedProductRows } = await client.query(
-        `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
+          [quantity, product.id, request.storeId],
+        );
+        const { rows: updatedProductRows } = await client.query(
+          `SELECT p.id, p.name, p.sku, p.category, p.cost_price_cents, p.selling_price_cents,
                 p.wholesale_price_cents, p.wholesale_quantity,
                 i.stock, i.reorder_level, p.supplier_id, s.name AS supplier_name,
-                p.expiry_date, p.color, p.initials, pr.discount_type, pr.discount_value,
-                pr.starts_at::text AS discount_starts_at, pr.ends_at::text AS discount_ends_at
+                p.expiry_date, p.color, p.initials
          FROM products p
          JOIN store_inventory i ON i.product_id = p.id AND i.store_id = $2
          LEFT JOIN suppliers s ON s.id = p.supplier_id
-         LEFT JOIN store_promotions pr ON pr.product_id = p.id AND pr.store_id = $2
          WHERE p.id = $1`,
-        [product.id, request.storeId],
-      );
-      updatedProducts.push(
-        productResponse(
-          updatedProductRows[0],
-          { includeCost: request.user.role !== "cashier", includeWholesale: true },
-        ),
-      );
-      await client.query(
-        `INSERT INTO stock_movements (store_id, product_id, user_id, quantity, reason)
+          [product.id, request.storeId],
+        );
+        updatedProducts.push(
+          productResponse(updatedProductRows[0], {
+            includeCost: request.user.role !== "cashier",
+            includeWholesale: true,
+          }),
+        );
+        await client.query(
+          `INSERT INTO stock_movements (store_id, product_id, user_id, quantity, reason)
          VALUES ($1, $2, $3, $4, $5)`,
-        [request.storeId, product.id, request.user.id, -quantity, `Sale CP-${String(sale.id).padStart(6, "0")}`],
-      );
-    }
-    const saleResponse = {
-      sale: {
-        id: `CP-${String(sale.id).padStart(6, "0")}`,
-        items: sale.item_count,
-        total: Number(sale.total_cents) / 100,
-        date: new Date(sale.created_at).getTime(),
-        method: sale.method,
-        cashReceived: sale.cash_received_cents === null
-          ? null
-          : Number(sale.cash_received_cents) / 100,
-        change: cashReceivedCents === null
-          ? 0
-          : Math.max(0, cashReceivedCents - totalCents) / 100,
-        mobileMoneyAmount: sale.mobile_money_amount_cents === null
-          ? null
-          : Number(sale.mobile_money_amount_cents) / 100,
-        cashierId: sale.cashier_id,
-        cashierName: request.user.name,
-        customerId,
-        customerName: customer?.name ?? "Walk-in customer",
-        subtotal: subtotalCents / 100,
-        receiptItems,
-        products: updatedProducts,
-      },
-    };
-    await client.query(
-      `UPDATE checkout_idempotency
+          [
+            request.storeId,
+            product.id,
+            request.user.id,
+            -quantity,
+            `Sale CP-${String(sale.id).padStart(6, "0")}`,
+          ],
+        );
+      }
+      const saleResponse = {
+        sale: {
+          id: `CP-${String(sale.id).padStart(6, "0")}`,
+          items: sale.item_count,
+          total: Number(sale.total_cents) / 100,
+          date: new Date(sale.created_at).getTime(),
+          method: sale.method,
+          cashReceived:
+            sale.cash_received_cents === null
+              ? null
+              : Number(sale.cash_received_cents) / 100,
+          change:
+            cashReceivedCents === null
+              ? 0
+              : Math.max(0, cashReceivedCents - totalCents) / 100,
+          mobileMoneyAmount:
+            sale.mobile_money_amount_cents === null
+              ? null
+              : Number(sale.mobile_money_amount_cents) / 100,
+          cashierId: sale.cashier_id,
+          cashierName: request.user.name,
+          customerId,
+          customerName: customer?.name ?? "Walk-in customer",
+          firstProductName: receiptItems[0]?.productName ?? "",
+          subtotal: subtotalCents / 100,
+          receiptItems,
+          products: updatedProducts,
+        },
+      };
+      await client.query(
+        `UPDATE checkout_idempotency
        SET response = $1
        WHERE user_id = $2 AND store_id = $3 AND idempotency_key = $4`,
-      [
-        JSON.stringify(saleResponse),
-        request.user.id,
-        request.storeId,
-        idempotencyKey,
-      ],
-    );
-    await client.query("COMMIT");
-    response.status(201).json(saleResponse);
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+        [
+          JSON.stringify(saleResponse),
+          request.user.id,
+          request.storeId,
+          idempotencyKey,
+        ],
+      );
+      await client.query("COMMIT");
+      response.status(201).json(saleResponse);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
 
-app.get("/api/users", requireUser, requirePermission("team:read"), requireStore, asyncRoute(async (request, response) => {
-  const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.email, u.role, u.active, u.created_at,
+app.get(
+  "/api/users",
+  requireUser,
+  requirePermission("team:read"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.name, u.email, u.role, u.active, u.created_at,
             COALESCE(json_agg(json_build_object('id', s.id, 'name', s.name)
               ORDER BY s.name) FILTER (WHERE s.id IS NOT NULL), '[]'::json) AS stores
      FROM users u
@@ -1674,121 +2149,159 @@ app.get("/api/users", requireUser, requirePermission("team:read"), requireStore,
      )
      GROUP BY u.id
      ORDER BY u.created_at`,
-    [request.user.role, request.user.id, request.storeId],
-  );
-  response.json({
-    users: rows.map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      active: user.active,
-      createdAt: new Date(user.created_at).getTime(),
-      stores: user.stores,
-    })),
-  });
-}));
-
-app.post("/api/users", requireUser, requirePermission("team:write"), requireStore, asyncRoute(async (request, response) => {
-  const { name, email, password, role } = request.body ?? {};
-  const storeIds = Array.isArray(request.body?.storeIds)
-    ? [...new Set(request.body.storeIds)]
-    : [request.storeId];
-  const cleanName = typeof name === "string" ? name.trim() : "";
-  const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-  if (request.user.role === "manager" && role !== "cashier") {
-    throw apiError(403, "Managers can only add cashier accounts.", "MANAGER_CASHIER_ONLY");
-  }
-  if (
-    !cleanName ||
-    cleanName.length > 120 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) ||
-    cleanEmail.length > 254 ||
-    !isValidPassword(password) ||
-    !["manager", "cashier"].includes(role) ||
-    storeIds.length !== 1 ||
-    storeIds.some((storeId) => !Number.isSafeInteger(storeId) || storeId < 1)
-  ) {
-    throw apiError(400, "Enter valid account details and assign the account to exactly one store.", "INVALID_USER");
-  }
-  const { rows: accessibleStores } = await pool.query(
-    `SELECT s.id, s.name FROM stores s
-     WHERE s.id = ANY($1::integer[]) AND s.active = TRUE
-       AND ($2 = 'owner' OR EXISTS (
-         SELECT 1 FROM user_stores us WHERE us.user_id = $3 AND us.store_id = s.id
-       ))`,
-    [storeIds, request.user.role, request.user.id],
-  );
-  if (accessibleStores.length !== storeIds.length) {
-    throw apiError(403, "You can only assign team members to stores you manage.", "STORE_ASSIGNMENT_FORBIDDEN");
-  }
-  const passwordHash = await bcrypt.hash(password, 12);
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows } = await client.query(
-      `INSERT INTO users (
-         name, email, role, password_hash, must_change_password
-       )
-       VALUES ($1, $2, $3, $4, TRUE)
-       RETURNING id, name, email, role, active, created_at`,
-      [cleanName, cleanEmail, role, passwordHash],
+      [request.user.role, request.user.id, request.storeId],
     );
-    const user = rows[0];
-    for (const storeId of storeIds) {
-      await client.query(
-        "INSERT INTO user_stores (user_id, store_id) VALUES ($1, $2)",
-        [user.id, storeId],
-      );
-    }
-    await client.query("COMMIT");
-    response.status(201).json({
-      user: {
+    response.json({
+      users: rows.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
         active: user.active,
         createdAt: new Date(user.created_at).getTime(),
-        stores: accessibleStores,
-      },
+        stores: user.stores,
+      })),
     });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (error.code === "23505") {
-      throw apiError(409, "An account with that email already exists.", "EMAIL_ALREADY_EXISTS");
+  }),
+);
+
+app.post(
+  "/api/users",
+  requireUser,
+  requirePermission("team:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const { name, email, password, role } = request.body ?? {};
+    const storeIds = Array.isArray(request.body?.storeIds)
+      ? [...new Set(request.body.storeIds)]
+      : [request.storeId];
+    const cleanName = typeof name === "string" ? name.trim() : "";
+    const cleanEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+    if (request.user.role === "manager" && role !== "cashier") {
+      throw apiError(
+        403,
+        "Managers can only add cashier accounts.",
+        "MANAGER_CASHIER_ONLY",
+      );
     }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+    if (
+      !cleanName ||
+      cleanName.length > 120 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) ||
+      cleanEmail.length > 254 ||
+      !isValidPassword(password) ||
+      !["manager", "cashier"].includes(role) ||
+      storeIds.length !== 1 ||
+      storeIds.some((storeId) => !Number.isSafeInteger(storeId) || storeId < 1)
+    ) {
+      throw apiError(
+        400,
+        "Enter valid account details and assign the account to exactly one store.",
+        "INVALID_USER",
+      );
+    }
+    const { rows: accessibleStores } = await pool.query(
+      `SELECT s.id, s.name FROM stores s
+     WHERE s.id = ANY($1::integer[]) AND s.active = TRUE
+       AND ($2 = 'owner' OR EXISTS (
+         SELECT 1 FROM user_stores us WHERE us.user_id = $3 AND us.store_id = s.id
+       ))`,
+      [storeIds, request.user.role, request.user.id],
+    );
+    if (accessibleStores.length !== storeIds.length) {
+      throw apiError(
+        403,
+        "You can only assign team members to stores you manage.",
+        "STORE_ASSIGNMENT_FORBIDDEN",
+      );
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `INSERT INTO users (
+         name, email, role, password_hash, must_change_password
+       )
+       VALUES ($1, $2, $3, $4, TRUE)
+       RETURNING id, name, email, role, active, created_at`,
+        [cleanName, cleanEmail, role, passwordHash],
+      );
+      const user = rows[0];
+      for (const storeId of storeIds) {
+        await client.query(
+          "INSERT INTO user_stores (user_id, store_id) VALUES ($1, $2)",
+          [user.id, storeId],
+        );
+      }
+      await client.query("COMMIT");
+      response.status(201).json({
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          active: user.active,
+          createdAt: new Date(user.created_at).getTime(),
+          stores: accessibleStores,
+        },
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error.code === "23505") {
+        throw apiError(
+          409,
+          "An account with that email already exists.",
+          "EMAIL_ALREADY_EXISTS",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
 
-app.put("/api/users/:id", requireUser, requirePermission("team:write"), requireStore, asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  const { name, email, storeIds, active } = request.body ?? {};
-  const cleanName = typeof name === "string" ? name.trim() : "";
-  const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-  const assignedStoreIds = Array.isArray(storeIds) ? [...new Set(storeIds)] : [];
-  if (
-    !Number.isSafeInteger(id) ||
-    id < 1 ||
-    !cleanName ||
-    cleanName.length > 120 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) ||
-    cleanEmail.length > 254 ||
-    typeof active !== "boolean" ||
-    assignedStoreIds.length !== 1 ||
-    assignedStoreIds.some((storeId) => !Number.isSafeInteger(storeId) || storeId < 1)
-  ) {
-    throw apiError(400, "Enter valid account details and assign the account to exactly one store.", "INVALID_USER");
-  }
+app.put(
+  "/api/users/:id",
+  requireUser,
+  requirePermission("team:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    const { name, email, storeIds, active } = request.body ?? {};
+    const cleanName = typeof name === "string" ? name.trim() : "";
+    const cleanEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+    const assignedStoreIds = Array.isArray(storeIds)
+      ? [...new Set(storeIds)]
+      : [];
+    if (
+      !Number.isSafeInteger(id) ||
+      id < 1 ||
+      !cleanName ||
+      cleanName.length > 120 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) ||
+      cleanEmail.length > 254 ||
+      typeof active !== "boolean" ||
+      assignedStoreIds.length !== 1 ||
+      assignedStoreIds.some(
+        (storeId) => !Number.isSafeInteger(storeId) || storeId < 1,
+      )
+    ) {
+      throw apiError(
+        400,
+        "Enter valid account details and assign the account to exactly one store.",
+        "INVALID_USER",
+      );
+    }
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: targetRows } = await client.query(
-      `SELECT u.id
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: targetRows } = await client.query(
+        `SELECT u.id
        FROM users u
        WHERE u.id = $1 AND u.role IN ('manager', 'cashier')
          AND EXISTS (
@@ -1796,41 +2309,49 @@ app.put("/api/users/:id", requireUser, requirePermission("team:write"), requireS
            WHERE us.user_id = u.id AND us.store_id = $2
          )
        FOR UPDATE`,
-      [id, request.storeId],
-    );
-    if (!targetRows[0]) {
-      throw apiError(404, "Team member not found for this store.", "TEAM_MEMBER_NOT_FOUND");
-    }
+        [id, request.storeId],
+      );
+      if (!targetRows[0]) {
+        throw apiError(
+          404,
+          "Team member not found for this store.",
+          "TEAM_MEMBER_NOT_FOUND",
+        );
+      }
 
-    const { rows: accessibleStores } = await client.query(
-      `SELECT s.id, s.name FROM stores s
+      const { rows: accessibleStores } = await client.query(
+        `SELECT s.id, s.name FROM stores s
        WHERE s.id = ANY($1::integer[]) AND s.active = TRUE
          AND ($2 = 'owner' OR EXISTS (
            SELECT 1 FROM user_stores us
            WHERE us.user_id = $3 AND us.store_id = s.id
          ))`,
-      [assignedStoreIds, request.user.role, request.user.id],
-    );
-    if (accessibleStores.length !== assignedStoreIds.length) {
-      throw apiError(403, "You can only assign cashiers to stores you manage.", "STORE_ASSIGNMENT_FORBIDDEN");
-    }
+        [assignedStoreIds, request.user.role, request.user.id],
+      );
+      if (accessibleStores.length !== assignedStoreIds.length) {
+        throw apiError(
+          403,
+          "You can only assign cashiers to stores you manage.",
+          "STORE_ASSIGNMENT_FORBIDDEN",
+        );
+      }
 
-    const { rows } = await client.query(
-      `UPDATE users
+      const { rows } = await client.query(
+        `UPDATE users
        SET name = $1, email = $2, active = $3,
            auth_version = auth_version + CASE WHEN active IS DISTINCT FROM $3 THEN 1 ELSE 0 END
        WHERE id = $4
        RETURNING id, name, email, role, active, created_at`,
-      [cleanName, cleanEmail, active, id],
-    );
-    if (request.user.role === "owner" || request.user.role === "manager") {
-      await client.query(
-        "DELETE FROM user_stores WHERE user_id = $1 AND NOT (store_id = ANY($2::integer[]))",
-        [id, assignedStoreIds],
+        [cleanName, cleanEmail, active, id],
       );
-    } else {
-      await client.query(
-        `DELETE FROM user_stores us
+      if (request.user.role === "owner" || request.user.role === "manager") {
+        await client.query(
+          "DELETE FROM user_stores WHERE user_id = $1 AND NOT (store_id = ANY($2::integer[]))",
+          [id, assignedStoreIds],
+        );
+      } else {
+        await client.query(
+          `DELETE FROM user_stores us
          USING stores s
          WHERE us.store_id = s.id AND us.user_id = $1
            AND EXISTS (
@@ -1838,46 +2359,56 @@ app.put("/api/users/:id", requireUser, requirePermission("team:write"), requireS
              WHERE manager_store.user_id = $2 AND manager_store.store_id = s.id
            )
            AND NOT (us.store_id = ANY($3::integer[]))`,
-        [id, request.user.id, assignedStoreIds],
-      );
+          [id, request.user.id, assignedStoreIds],
+        );
+      }
+      for (const storeId of assignedStoreIds) {
+        await client.query(
+          "INSERT INTO user_stores (user_id, store_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [id, storeId],
+        );
+      }
+      await client.query("COMMIT");
+      response.json({
+        user: {
+          id: rows[0].id,
+          name: rows[0].name,
+          email: rows[0].email,
+          role: rows[0].role,
+          active: rows[0].active,
+          createdAt: new Date(rows[0].created_at).getTime(),
+          stores: accessibleStores,
+        },
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error.code === "23505") {
+        throw apiError(
+          409,
+          "An account with that email already exists.",
+          "EMAIL_ALREADY_EXISTS",
+        );
+      }
+      throw error;
+    } finally {
+      client.release();
     }
-    for (const storeId of assignedStoreIds) {
-      await client.query(
-        "INSERT INTO user_stores (user_id, store_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [id, storeId],
-      );
-    }
-    await client.query("COMMIT");
-    response.json({
-      user: {
-        id: rows[0].id,
-        name: rows[0].name,
-        email: rows[0].email,
-        role: rows[0].role,
-        active: rows[0].active,
-        createdAt: new Date(rows[0].created_at).getTime(),
-        stores: accessibleStores,
-      },
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    if (error.code === "23505") {
-      throw apiError(409, "An account with that email already exists.", "EMAIL_ALREADY_EXISTS");
-    }
-    throw error;
-  } finally {
-    client.release();
-  }
-}));
+  }),
+);
 
-app.post("/api/users/:id/password-reset", requireUser, requirePermission("team:write"), requireStore, asyncRoute(async (request, response) => {
-  const id = Number(request.params.id);
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw apiError(400, "Invalid user ID.", "INVALID_USER_ID");
-  }
+app.post(
+  "/api/users/:id/password-reset",
+  requireUser,
+  requirePermission("team:write"),
+  requireStore,
+  asyncRoute(async (request, response) => {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      throw apiError(400, "Invalid user ID.", "INVALID_USER_ID");
+    }
 
-  const { rows } = await pool.query(
-    `SELECT u.id
+    const { rows } = await pool.query(
+      `SELECT u.id
      FROM users u
      WHERE u.id = $1 AND u.role IN ('manager', 'cashier')
        AND ($2 = 'owner'
@@ -1889,41 +2420,50 @@ app.post("/api/users/:id/password-reset", requireUser, requirePermission("team:w
              AND manager_store.user_id = $3
              AND target_store.store_id = $4
          ))`,
-    [id, request.user.role, request.user.id, request.storeId],
-  );
-  if (!rows[0]) {
-    throw apiError(404, "Team member not found for this store.", "TEAM_MEMBER_NOT_FOUND");
-  }
+      [id, request.user.role, request.user.id, request.storeId],
+    );
+    if (!rows[0]) {
+      throw apiError(
+        404,
+        "Team member not found for this store.",
+        "TEAM_MEMBER_NOT_FOUND",
+      );
+    }
 
-  const temporaryPassword = randomBytes(18).toString("base64url");
-  const passwordHash = await bcrypt.hash(temporaryPassword, 12);
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows: updatedUsers } = await client.query(
-      `UPDATE users
+    const temporaryPassword = randomBytes(18).toString("base64url");
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: updatedUsers } = await client.query(
+        `UPDATE users
        SET password_hash = $1, must_change_password = TRUE,
            auth_version = auth_version + 1
        WHERE id = $2 AND role IN ('manager', 'cashier')
        RETURNING id`,
-      [passwordHash, id],
-    );
-    if (!updatedUsers[0]) {
-      throw apiError(404, "Team member not found for this store.", "TEAM_MEMBER_NOT_FOUND");
+        [passwordHash, id],
+      );
+      if (!updatedUsers[0]) {
+        throw apiError(
+          404,
+          "Team member not found for this store.",
+          "TEAM_MEMBER_NOT_FOUND",
+        );
+      }
+      await client.query(
+        "DELETE FROM user_sessions WHERE sess->>'userId' = $1",
+        [String(id)],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-    await client.query(
-      "DELETE FROM user_sessions WHERE sess->>'userId' = $1",
-      [String(id)],
-    );
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-  response.json({ temporaryPassword });
-}));
+    response.json({ temporaryPassword });
+  }),
+);
 
 app.use("/api", (request, response, next) => {
   next(apiError(404, "API endpoint not found.", "NOT_FOUND"));
@@ -1944,7 +2484,9 @@ app.use((error, request, response, next) => {
     console.error(error);
   }
   response.status(error.status ?? 500).json({
-    error: error.status ? error.message : "An unexpected server error occurred.",
+    error: error.status
+      ? error.message
+      : "An unexpected server error occurred.",
     code: error.code ?? "INTERNAL_ERROR",
     ...(error.quote ? { quote: error.quote } : {}),
   });
@@ -2028,6 +2570,11 @@ async function initializeDatabase() {
       notes VARCHAR(500),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS customer_stores (
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+      PRIMARY KEY (customer_id, store_id)
+    );
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
       name VARCHAR(120) NOT NULL,
@@ -2056,17 +2603,7 @@ async function initializeDatabase() {
       reorder_level INTEGER NOT NULL DEFAULT 5 CHECK (reorder_level >= 0),
       PRIMARY KEY (store_id, product_id)
     );
-    CREATE TABLE IF NOT EXISTS store_promotions (
-      store_id INTEGER NOT NULL REFERENCES stores(id),
-      product_id INTEGER NOT NULL REFERENCES products(id),
-      discount_type VARCHAR(8) NOT NULL CHECK (discount_type IN ('percent', 'fixed')),
-      discount_value NUMERIC(12, 2) NOT NULL CHECK (discount_value > 0),
-      starts_at DATE,
-      ends_at DATE,
-      PRIMARY KEY (store_id, product_id),
-      CHECK (starts_at IS NULL OR ends_at IS NULL OR starts_at <= ends_at),
-      CHECK (discount_type <> 'percent' OR discount_value < 100)
-    );
+    DROP TABLE IF EXISTS store_promotions;
     CREATE TABLE IF NOT EXISTS sales (
       id BIGSERIAL PRIMARY KEY,
       store_id INTEGER NOT NULL REFERENCES stores(id),
@@ -2160,6 +2697,18 @@ async function initializeDatabase() {
       ON CONFLICT DO NOTHING;
     UPDATE sales SET store_id = (SELECT id FROM stores ORDER BY id LIMIT 1) WHERE store_id IS NULL;
     UPDATE stock_movements SET store_id = (SELECT id FROM stores ORDER BY id LIMIT 1) WHERE store_id IS NULL;
+    INSERT INTO customer_stores (customer_id, store_id)
+      SELECT DISTINCT s.customer_id, s.store_id
+      FROM sales s
+      WHERE s.customer_id IS NOT NULL
+      ON CONFLICT DO NOTHING;
+    INSERT INTO customer_stores (customer_id, store_id)
+      SELECT c.id, (SELECT id FROM stores ORDER BY id LIMIT 1)
+      FROM customers c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM customer_stores cs WHERE cs.customer_id = c.id
+      )
+      ON CONFLICT DO NOTHING;
     ALTER TABLE sales ALTER COLUMN store_id SET NOT NULL;
     ALTER TABLE stock_movements ALTER COLUMN store_id SET NOT NULL;
     INSERT INTO categories (name)
@@ -2261,15 +2810,21 @@ async function initializeDatabase() {
 }
 
 await initializeDatabase();
-const idempotencyRetentionTimer = setInterval(() => {
-  pool
-    .query(
-      "DELETE FROM checkout_idempotency WHERE created_at < NOW() - INTERVAL '30 days'",
-    )
-    .catch((error) => {
-      console.error("Could not clean up expired checkout idempotency records.", error);
-    });
-}, 24 * 60 * 60 * 1000);
+const idempotencyRetentionTimer = setInterval(
+  () => {
+    pool
+      .query(
+        "DELETE FROM checkout_idempotency WHERE created_at < NOW() - INTERVAL '30 days'",
+      )
+      .catch((error) => {
+        console.error(
+          "Could not clean up expired checkout idempotency records.",
+          error,
+        );
+      });
+  },
+  24 * 60 * 60 * 1000,
+);
 idempotencyRetentionTimer.unref();
 app.listen(port, () => {
   console.info(`Counterpoint API listening on port ${port}.`);

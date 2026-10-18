@@ -50,7 +50,39 @@ import {
   findExpiringProducts,
   lastDayKeys,
 } from "./dashboard-model.js";
+import { requestApi } from "./shared/api-client.js";
+import { getVisiblePages } from "./app/permissions.js";
+import { navigationItems } from "./app/navigation.js";
+import { changePassword, getSession, signIn, signOut as signOutSession } from "./features/auth/auth-api.js";
+import { AuthGate } from "./features/auth/AuthGate.jsx";
+import { saleUnitPrice } from "./features/checkout/pricing.js";
+import { addCartItem, changeCartQuantity, removeCartItem, summarizeCart } from "./features/checkout/cart-model.js";
+import { CheckoutCatalog } from "./features/checkout/CheckoutCatalog.jsx";
+import { CheckoutCustomerPicker } from "./features/checkout/CheckoutCustomerPicker.jsx";
+import { quoteSale, submitCashSale } from "./features/checkout/checkout-api.js";
+import { filterInventory, getStockHealth, validateStockAdjustment } from "./features/inventory/inventory-model.js";
+import { adjustProductStock, createProduct, getInventoryReport, listProducts, updateProduct } from "./features/inventory/inventory-api.js";
+import { InventoryTable } from "./features/inventory/InventoryTable.jsx";
+import { ProductFormDialog } from "./features/inventory/ProductFormDialog.jsx";
+import { listSales, getSale, getSalesSummary } from "./features/sales/sales-api.js";
+import { filterDemoSales, paginate } from "./features/sales/sales-model.js";
+import { SalesPage } from "./features/sales/SalesPage.jsx";
+import { listCustomers, createCustomer, updateCustomer, getCustomerHistory } from "./features/customers/customers-api.js";
+import { filterCustomers } from "./features/customers/customers-model.js";
+import { CustomersPage } from "./features/customers/CustomersPage.jsx";
+import { CustomerHistoryPage } from "./features/customers/CustomerHistoryPage.jsx";
+import { SuppliersPage } from "./features/suppliers/SuppliersPage.jsx";
+import { CategoriesPage } from "./features/catalog/CategoriesPage.jsx";
+import { listSuppliers, createSupplier as createSupplierRequest, updateSupplier } from "./features/suppliers/suppliers-api.js";
+import { listCategories, createCategory as createCategoryRequest, updateCategory } from "./features/catalog/categories-api.js";
+import { TeamPage } from "./features/team/TeamPage.jsx";
+import { listTeamMembers, createTeamMember as createTeamMemberRequest, updateTeamMember as updateTeamMemberRequest, resetTeamMemberPassword as resetTeamMemberPasswordRequest } from "./features/team/team-api.js";
+import { listStores, saveStore } from "./features/stores/stores-api.js";
+import { StoresPage } from "./features/stores/StoresPage.jsx";
+import { SalesTrendChart } from "./features/dashboard/SalesTrendChart.jsx";
 import "./POS.css";
+import "./modern-ui.css";
+import "./features/checkout/checkout.css";
 
 const initialSuppliers = [
   {
@@ -93,10 +125,6 @@ const initialProducts = [
     expiryDate: "2027-06-30",
     color: "#f7ded5",
     initials: "GC",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription:
       "Gentle gel cleanser with aloe and vitamin B5, 150 ml.",
     mftDate: "2025-06-30",
@@ -117,10 +145,6 @@ const initialProducts = [
     expiryDate: "2027-03-31",
     color: "#f8edc8",
     initials: "VC",
-    discountType: "percent",
-    discountValue: 10,
-    discountStartsAt: "2026-01-01",
-    discountEndsAt: "2027-12-31",
     productionDescription:
       "Brightening serum with vitamin C and hyaluronic acid, 30 ml.",
     mftDate: "2025-03-31",
@@ -141,10 +165,6 @@ const initialProducts = [
     expiryDate: "2027-11-30",
     color: "#ead8bd",
     initials: "SB",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription: "Rich whipped shea body cream, unscented, 250 ml.",
     mftDate: "2025-11-30",
   },
@@ -164,10 +184,6 @@ const initialProducts = [
     expiryDate: "2027-08-31",
     color: "#f1dfc8",
     initials: "CO",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription: "Nourishing cocoa and vanilla body oil, 100 ml.",
     mftDate: "2025-08-31",
   },
@@ -187,10 +203,6 @@ const initialProducts = [
     expiryDate: "2028-02-28",
     color: "#f0d2d8",
     initials: "VL",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription: "Long-wear velvet matte lipstick in Rose, 4 g.",
     mftDate: "2025-02-28",
   },
@@ -210,10 +222,6 @@ const initialProducts = [
     expiryDate: "2027-09-30",
     color: "#f5e8bf",
     initials: "SP",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription: "Broad-spectrum SPF 50 face sunscreen, 50 ml.",
     mftDate: "2025-09-30",
   },
@@ -233,10 +241,6 @@ const initialProducts = [
     expiryDate: "2027-05-31",
     color: "#dcece4",
     initials: "HM",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription:
       "Single-use hydrating sheet mask with cucumber extract.",
     mftDate: "2025-05-31",
@@ -257,10 +261,6 @@ const initialProducts = [
     expiryDate: "2027-12-31",
     color: "#e4e2f5",
     initials: "OM",
-    discountType: "",
-    discountValue: 0,
-    discountStartsAt: "",
-    discountEndsAt: "",
     productionDescription:
       "Fragrance-free oat moisturizer for sensitive skin, 50 ml.",
     mftDate: "2025-12-31",
@@ -402,38 +402,6 @@ const initialSales = [
   },
 ];
 
-const navItems = [
-  { id: "overview", label: "Dashboard", icon: LayoutDashboard },
-  { id: "checkout", label: "Point of Sale", icon: ShoppingCart },
-  { id: "inventory", label: "Inventory", icon: Boxes },
-  {
-    id: "stock-report",
-    label: "Stock Report",
-    icon: BarChart3,
-    roles: ["owner", "manager"],
-  },
-  {
-    id: "suppliers",
-    label: "Suppliers",
-    icon: Truck,
-    roles: ["owner", "manager"],
-  },
-  {
-    id: "categories",
-    label: "Categories",
-    icon: Tag,
-    roles: ["owner", "manager"],
-  },
-  { id: "customers", label: "Customers", icon: Users },
-  { id: "sales", label: "Sales", icon: ClipboardList },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Settings,
-    roles: ["owner", "manager"],
-  },
-];
-
 const DEMO_DATA_VERSION = "cosmetics-v1";
 
 function ensureCurrentDemoData() {
@@ -455,45 +423,6 @@ function ensureCurrentDemoData() {
   });
   localStorage.removeItem("counterpoint-held-orders-demo-owner");
   localStorage.setItem("counterpoint-demo-data-version", DEMO_DATA_VERSION);
-}
-
-async function requestApi(path, options = {}) {
-  const response = await fetch(`/api${path}`, {
-    ...options,
-    credentials: "same-origin",
-    headers: {
-      ...(localStorage.getItem("counterpoint-active-store")
-        ? { "X-Store-Id": localStorage.getItem("counterpoint-active-store") }
-        : {}),
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...options.headers,
-    },
-  });
-  if (response.status === 204) return null;
-  let payload = null;
-  if (response.headers.get("content-type")?.includes("application/json")) {
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-  }
-  if (!response.ok) {
-    const message =
-      payload?.error ??
-      (response.status >= 500
-        ? `The store service is temporarily unavailable (HTTP ${response.status}).`
-        : `The store service returned an unexpected response (HTTP ${response.status}).`);
-    const error = new Error(message);
-    error.status = response.status;
-    error.code = payload?.code ?? "HTTP_ERROR";
-    error.quote = payload?.quote;
-    throw error;
-  }
-  if (!payload || typeof payload !== "object") {
-    throw new Error("The store service returned an invalid response.");
-  }
-  return payload;
 }
 
 function readDemoSaved(key, fallback) {
@@ -528,10 +457,6 @@ function normalizeProduct(product, index) {
       : (product.wholesalePrice ?? 0),
     wholesaleQuantity:
       product.wholesaleQuantity ?? sampleDefaults?.wholesaleQuantity ?? 0,
-    discountType: product.discountType ?? "",
-    discountValue: product.discountValue ?? 0,
-    discountStartsAt: product.discountStartsAt ?? "",
-    discountEndsAt: product.discountEndsAt ?? "",
     reorderLevel: hasLegacyMetadata
       ? (sampleDefaults?.reorderLevel ?? product.reorderLevel ?? 5)
       : (product.reorderLevel ?? 5),
@@ -547,31 +472,6 @@ function normalizeProduct(product, index) {
     productionDescription: product.productionDescription ?? "",
     mftDate: product.mftDate ?? "",
   };
-}
-
-function saleUnitPrice(product, quantity) {
-  const candidates = [Math.round(product.price * 100)];
-  if (
-    product.wholesaleQuantity > 0 &&
-    quantity >= product.wholesaleQuantity &&
-    product.wholesalePrice > 0
-  )
-    candidates.push(Math.round(product.wholesalePrice * 100));
-  const today = new Date().toISOString().slice(0, 10);
-  const promotionIsActive =
-    product.discountType &&
-    (!product.discountStartsAt || today >= product.discountStartsAt) &&
-    (!product.discountEndsAt || today <= product.discountEndsAt);
-  if (promotionIsActive && product.discountValue > 0) {
-    const retailPriceCents = Math.round(product.price * 100);
-    const promotionPrice =
-      product.discountType === "percent"
-        ? retailPriceCents -
-          Math.round((retailPriceCents * product.discountValue) / 100)
-        : retailPriceCents - Math.round(product.discountValue * 100);
-    if (promotionPrice > 0) candidates.push(promotionPrice);
-  }
-  return Math.min(...candidates) / 100;
 }
 
 function makeDemoReport(products, movements, expiringWithinDays = 30) {
@@ -799,6 +699,7 @@ function POS() {
       ? readDemoSaved("customers", initialCustomers)
       : [],
   );
+  const [customerSearch, setCustomerSearch] = useState("");
   const [page, setPage] = useState("overview");
   const [settingsSection, setSettingsSection] = useState("stores");
   const [cart, setCart] = useState([]);
@@ -897,7 +798,6 @@ function POS() {
   useEffect(() => {
     const focusProductSearch = (event) => {
       if (
-        page !== "checkout" ||
         !["authenticated", "demo"].includes(mode) ||
         !(event.metaKey || event.ctrlKey) ||
         event.key.toLowerCase() !== "k" ||
@@ -906,7 +806,10 @@ function POS() {
         return;
       }
       event.preventDefault();
-      productSearchRef.current?.focus();
+      if (page !== "checkout") goToPage("checkout");
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => productSearchRef.current?.focus()),
+      );
     };
     window.addEventListener("keydown", focusProductSearch);
     return () => window.removeEventListener("keydown", focusProductSearch);
@@ -1013,14 +916,13 @@ function POS() {
     const search = transactionQuery.trim();
     let current = true;
     const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({
-        page: String(salesPage),
-        pageSize: "50",
-      });
-      if (search) params.set("search", search);
-      if (salesDateFrom) params.set("dateFrom", salesDateFrom);
-      if (salesDateTo) params.set("dateTo", salesDateTo);
-      requestApi(`/sales?${params}`)
+      listSales({
+        page: salesPage,
+        pageSize: 50,
+        search,
+        dateFrom: salesDateFrom,
+        dateTo: salesDateTo,
+      })
         .then(({ sales: results, total }) => {
           if (current) {
             setSales(results);
@@ -1048,21 +950,17 @@ function POS() {
       customerData,
       salesSummaryData,
     ] = await Promise.all([
-      requestApi("/products"),
-      requestApi("/sales?page=1&pageSize=50"),
+      listProducts(),
+      listSales({ page: 1, pageSize: 50 }),
       ["owner", "manager"].includes(activeUser.role)
-        ? requestApi("/users")
+        ? listTeamMembers()
         : Promise.resolve({ users: [] }),
       ["owner", "manager"].includes(activeUser.role)
-        ? requestApi("/suppliers")
+        ? listSuppliers()
         : Promise.resolve({ suppliers: [] }),
-      requestApi("/categories"),
-      requestApi("/customers"),
-      (() => {
-        const range = localSalesSummaryRange();
-        const params = new URLSearchParams(range);
-        return requestApi(`/sales/summary?${params}`);
-      })(),
+      listCategories(),
+      listCustomers(),
+      getSalesSummary(localSalesSummaryRange()),
     ]);
     setProducts(productData.products.map(normalizeProduct));
     setSales(saleData.sales);
@@ -1118,7 +1016,7 @@ function POS() {
       return;
     }
     setHeldOrdersByStore(readHeldOrders(activeUser.id));
-    const { stores: availableStores } = await requestApi("/stores");
+    const { stores: availableStores } = await listStores();
     if (availableStores.length === 0) {
       throw new Error(
         "No store is assigned to your account. Ask an owner or manager for access.",
@@ -1130,9 +1028,7 @@ function POS() {
       availableStores[0];
     setStores(availableStores);
     if (["owner", "manager"].includes(activeUser.role)) {
-      const { stores: allStores } = await requestApi(
-        "/stores?includeInactive=true",
-      );
+      const { stores: allStores } = await listStores({ includeInactive: true });
       setManagementStores(allStores);
     } else {
       setManagementStores([]);
@@ -1166,7 +1062,7 @@ function POS() {
 
   useEffect(() => {
     if (mode !== "loading") return;
-    requestApi("/auth/session")
+    getSession()
       .then(({ user: activeUser }) => loadWorkspace(activeUser))
       .catch((error) => {
         if (error.status === 401) {
@@ -1179,13 +1075,7 @@ function POS() {
   }, [mode]);
 
   const isDemo = mode === "demo";
-  const lowStock = products.filter(
-    (product) => product.stock > 0 && product.stock <= product.reorderLevel,
-  );
-  const outOfStock = products.filter((product) => product.stock === 0);
-  const inStock = products.filter(
-    (product) => product.stock > product.reorderLevel,
-  );
+  const { inStock, lowStock, outOfStock } = getStockHealth(products);
   const stockStatusTotal = inStock.length + lowStock.length + outOfStock.length;
   const inStockStop = stockStatusTotal
     ? (inStock.length / stockStatusTotal) * 100
@@ -1193,15 +1083,10 @@ function POS() {
   const lowStockStop = stockStatusTotal
     ? ((inStock.length + lowStock.length) / stockStatusTotal) * 100
     : 0;
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = cart.reduce(
-    (sum, item) => sum + saleUnitPrice(item, item.quantity) * item.quantity,
-    0,
-  );
-  const total = subtotal;
+  const { count: cartCount, subtotalCents, totalCents, total } = summarizeCart(cart);
+  const subtotal = subtotalCents / 100;
   const heldOrders = heldOrdersByStore[activeStoreId] ?? [];
   const cashReceivedCents = amountCents(cashReceived);
-  const totalCents = amountCents(total) ?? 0;
   const changeToReturn =
     cashReceivedCents === null
       ? 0
@@ -1240,10 +1125,6 @@ function POS() {
     ? sales.length
     : (salesSummary?.totalCount ?? salesTotalCount);
   const dashboardTrend = fillSalesTrend(dashboardInsights.trend, dashboardCustomRange ? dashboardRangeKeys(dashboardCustomRange) : lastDayKeys(new Date(), 30));
-  const dashboardTrendMax = Math.max(
-    0,
-    ...dashboardTrend.map((entry) => entry.revenue),
-  );
   const dashboardKpiTrend = dashboardCustomRange ? dashboardTrend : dashboardTrend.slice(-dashboardPeriod);
   const dashboardRangeRevenue = dashboardKpiTrend.reduce((sum, day) => sum + day.revenue, 0);
   const dashboardRangeOrders = dashboardKpiTrend.reduce((sum, day) => sum + day.count, 0);
@@ -1261,76 +1142,43 @@ function POS() {
     today: expiryToday,
   });
   const productSearchTerm = query.trim().toLowerCase();
-  const filteredProducts = productSearchTerm
-    ? products.filter((product) => {
-        const matchesQuery = `${product.name} ${product.sku}`
-          .toLowerCase()
-          .includes(productSearchTerm);
-        return matchesQuery && product.stock > 0;
-      })
-    : [];
-  const filteredInventory = products.filter(
-    (product) =>
-      (!inventoryLowStockOnly ||
-        product.stock === 0 ||
-        product.stock <= product.reorderLevel) &&
-      `${product.name} ${product.sku} ${product.category} ${product.supplier}`
-        .toLowerCase()
-        .includes(inventoryQuery.toLowerCase()),
-  );
+  const availableCheckoutProducts = products.filter((product) => product.stock > 0);
+  const filteredInventory = filterInventory(products, inventoryQuery, inventoryLowStockOnly);
   const filteredTransactions = isDemo
-    ? sales.filter((sale) => {
-        const matchesSearch =
-          `${sale.id} ${sale.cashierName ?? ""} ${sale.customerName ?? "Walk-in customer"} ${sale.method} ${new Date(sale.date).toLocaleString()}`
-            .toLowerCase()
-            .includes(transactionQuery.trim().toLowerCase());
-        const saleDate = localDateKey(sale.date);
-        return (
-          matchesSearch &&
-          (!salesDateFrom || saleDate >= salesDateFrom) &&
-          (!salesDateTo || saleDate <= salesDateTo)
-        );
-      })
+    ? filterDemoSales(sales, { query: transactionQuery, dateFrom: salesDateFrom, dateTo: salesDateTo })
     : sales;
-  const transactionTotal = isDemo
-    ? filteredTransactions.length
-    : salesTotalCount;
-  const displayedTransactions = isDemo
-    ? filteredTransactions.slice((salesPage - 1) * 50, salesPage * 50)
-    : filteredTransactions;
-  const transactionPages = Math.max(1, Math.ceil(transactionTotal / 50));
+  const demoSalesPage = isDemo ? paginate(filteredTransactions, salesPage) : null;
+  const transactionTotal = isDemo ? demoSalesPage.total : salesTotalCount;
+  const displayedTransactions = isDemo ? demoSalesPage.items : filteredTransactions;
+  const transactionPages = isDemo ? demoSalesPage.pageCount : Math.max(1, Math.ceil(transactionTotal / 50));
 
   function addToCart(product) {
-    if (saleBusy) return;
-    const inCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
-    if (inCart >= product.stock) {
+    if (saleBusy) return false;
+    const inCart = cart.find((item) => item.id === product?.id)?.quantity ?? 0;
+    if (!product || inCart >= product.stock) {
       setToast("You’ve reached the available stock for this item.");
+      return false;
+    }
+    setCart((items) => addCartItem(items, product).cart);
+    return true;
+  }
+
+  function addScannedProduct(code) {
+    const normalizedCode = code.trim().toLocaleLowerCase();
+    if (!normalizedCode) return;
+    const product = products.find(
+      (item) => item.sku.trim().toLocaleLowerCase() === normalizedCode,
+    );
+    if (!product) {
+      setToast(`No product matches SKU “${code.trim()}”.`);
       return;
     }
-    const existing = cart.find((item) => item.id === product.id);
-    setCart((items) =>
-      existing
-        ? items.map((item) =>
-            item.id === product.id
-              ? { ...item, quantity: item.quantity + 1 }
-              : item,
-          )
-        : [...items, { ...product, quantity: 1 }],
-    );
+    if (addToCart(product)) setQuery("");
   }
 
   function updateQuantity(productId, amount) {
     if (saleBusy) return;
-    setCart((items) =>
-      items
-        .map((item) => {
-          if (item.id !== productId) return item;
-          const stock =
-            products.find((product) => product.id === productId)?.stock ?? 0;
-          return { ...item, quantity: Math.min(stock, item.quantity + amount) };
-        })
-        .filter((item) => item.quantity > 0),
-    );
+    setCart((items) => changeCartQuantity(items, productId, amount, products));
   }
 
   function resetCurrentSale() {
@@ -1457,9 +1305,8 @@ function POS() {
 
   async function refreshSalesSummary() {
     if (isDemo) return;
-    const params = new URLSearchParams(localSalesSummaryRange());
     try {
-      setSalesSummary(await requestApi(`/sales/summary?${params}`));
+      setSalesSummary(await getSalesSummary(localSalesSummaryRange()));
     } catch (error) {
       setToast(
         `Sale completed, but dashboard totals could not refresh: ${error.message}`,
@@ -1499,15 +1346,9 @@ function POS() {
         }
       }
       if (!isDemo && !retryingIdempotentSale) {
-        const { quote } = await requestApi("/sales/quote", {
-          method: "POST",
-          body: JSON.stringify({
-            items: cart.map(({ id, quantity }) => ({
-              productId: id,
-              quantity,
-            })),
-          }),
-        });
+        const { quote } = await quoteSale(
+          cart.map(({ id, quantity }) => ({ productId: id, quantity })),
+        );
         if (applyQuoteForReview(quote)) {
           setToast(
             quote.available
@@ -1542,13 +1383,10 @@ function POS() {
           }),
         };
       } else {
-        const result = await requestApi("/sales", {
-          method: "POST",
-          headers: {
-            "Idempotency-Key": saleIdempotencyRef.current.key,
-          },
-          body: JSON.stringify(salePayload),
-        });
+        const result = await submitCashSale(
+          salePayload,
+          saleIdempotencyRef.current.key,
+        );
         sale = result.sale;
         sale.itemsDetail = result.sale.receiptItems;
         setProducts((items) =>
@@ -1599,7 +1437,7 @@ function POS() {
       let detail = transaction;
       if (!isDemo) {
         const saleId = Number(String(transaction.id).replace(/^CP-/, ""));
-        const result = await requestApi(`/sales/${saleId}`);
+        const result = await getSale(saleId);
         detail = result.sale;
       }
       setReceipt(detail);
@@ -1672,18 +1510,12 @@ function POS() {
         ? isDemo
           ? { ...editingCategory, name }
           : (
-              await requestApi(`/categories/${editingCategory.id}`, {
-                method: "PUT",
-                body: JSON.stringify({ name }),
-              })
+              await updateCategory(editingCategory.id, name)
             ).category
         : isDemo
           ? { id: Date.now(), name }
           : (
-              await requestApi("/categories", {
-                method: "POST",
-                body: JSON.stringify({ name }),
-              })
+              await createCategoryRequest(name)
             ).category;
       if (editingCategory) {
         setInventoryCategories((items) =>
@@ -1768,10 +1600,7 @@ function POS() {
         const updatedProduct = isDemo
           ? normalizeProduct({ ...editingProduct, ...productData })
           : (
-              await requestApi(`/products/${editingProduct.id}`, {
-                method: "PUT",
-                body: JSON.stringify(apiProductData),
-              })
+              await updateProduct(editingProduct.id, apiProductData)
             ).product;
         setProducts((items) =>
           items.map((item) =>
@@ -1796,10 +1625,7 @@ function POS() {
                 .toUpperCase(),
             })
           : (
-              await requestApi("/products", {
-                method: "POST",
-                body: JSON.stringify(apiProductData),
-              })
+              await createProduct(apiProductData)
             ).product;
         const currentStoreProduct =
           String(productData.storeId) === activeStoreId
@@ -1836,17 +1662,14 @@ function POS() {
     const direction = formData.get("direction") === "remove" ? -1 : 1;
     const adjustment = direction * quantity;
     const reason = String(formData.get("reason") ?? "").trim();
-    if (
-      !Number.isInteger(quantity) ||
-      quantity < 1 ||
-      quantity > 1_000_000 ||
-      !reason
-    ) {
-      setToast("Enter a whole-number quantity and adjustment reason.");
-      return;
-    }
-    if (stockProduct.stock + adjustment < 0) {
-      setToast("This adjustment would take stock below zero.");
+    const validationMessage = validateStockAdjustment({
+      stock: stockProduct.stock,
+      quantity,
+      direction: direction < 0 ? "remove" : "add",
+      reason,
+    });
+    if (validationMessage) {
+      setToast(validationMessage);
       return;
     }
     try {
@@ -1870,12 +1693,10 @@ function POS() {
           ...items,
         ]);
       } else {
-        ({ product: updatedProduct } = await requestApi(
-          `/products/${stockProduct.id}/stock-adjustments`,
-          {
-            method: "POST",
-            body: JSON.stringify({ quantity: adjustment, reason }),
-          },
+        ({ product: updatedProduct } = await adjustProductStock(
+          stockProduct.id,
+          adjustment,
+          reason,
         ));
       }
       setProducts((items) =>
@@ -1925,16 +1746,10 @@ function POS() {
         throw new Error(
           "Manage stores from a connected account; demo data is browser-local.",
         );
-      const { store } = await requestApi(
-        storeId ? `/stores/${storeId}` : "/stores",
-        {
-          method: storeId ? "PUT" : "POST",
-          body: JSON.stringify({
-            ...storeDetails,
-            ...(storeId ? { active: editingStore.active } : {}),
-          }),
-        },
-      );
+      const { store } = await saveStore(storeId, {
+        ...storeDetails,
+        ...(storeId ? { active: editingStore.active } : {}),
+      });
       setManagementStores((items) =>
         (storeId
           ? items.map((item) => (item.id === store.id ? store : item))
@@ -1974,10 +1789,7 @@ function POS() {
         );
       }
       const updated = { ...store, active: !store.active };
-      const { store: savedStore } = await requestApi(`/stores/${store.id}`, {
-        method: "PUT",
-        body: JSON.stringify(updated),
-      });
+      const { store: savedStore } = await saveStore(store.id, updated);
       setManagementStores((items) =>
         items.map((item) => (item.id === savedStore.id ? savedStore : item)),
       );
@@ -2027,9 +1839,7 @@ function POS() {
       const password = isDemo
         ? generateTemporaryPassword()
         : (
-            await requestApi(`/users/${member.id}/password-reset`, {
-              method: "POST",
-            })
+            await resetTeamMemberPasswordRequest(member.id)
           ).temporaryPassword;
       setCreatedCredential({
         name: member.name,
@@ -2064,12 +1874,9 @@ function POS() {
 
     setPasswordChangeBusy(true);
     try {
-      await requestApi("/auth/password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
+      await changePassword({ currentPassword, newPassword });
       if (mode === "password-change-required") {
-        const { user: activeUser } = await requestApi("/auth/session");
+        const { user: activeUser } = await getSession();
         await loadWorkspace(activeUser);
         setToast("Password changed. You can now use your account.");
         return;
@@ -2104,12 +1911,9 @@ function POS() {
               ),
             }
           : (
-              await requestApi(`/users/${editingTeamMember.id}`, {
-                method: "PUT",
-                body: JSON.stringify({
-                  ...member,
-                  active: editingTeamMember.active,
-                }),
+              await updateTeamMemberRequest(editingTeamMember.id, {
+                ...member,
+                active: editingTeamMember.active,
               })
             ).user;
         setTeam((items) =>
@@ -2144,10 +1948,7 @@ function POS() {
             },
           ]);
         } else {
-          const result = await requestApi("/users", {
-            method: "POST",
-            body: JSON.stringify(newMember),
-          });
+          const result = await createTeamMemberRequest(newMember);
           setTeam((items) => [...items, result.user]);
         }
         setCreatedCredential({
@@ -2170,16 +1971,11 @@ function POS() {
       const updated = isDemo
         ? { ...member, active: !member.active }
         : (
-            await requestApi(`/users/${member.id}`, {
-              method: "PUT",
-              body: JSON.stringify({
-                name: member.name,
-                email: member.email,
-                storeIds: (member.stores ?? []).map((store) =>
-                  Number(store.id),
-                ),
-                active: !member.active,
-              }),
+            await updateTeamMemberRequest(member.id, {
+              name: member.name,
+              email: member.email,
+              storeIds: (member.stores ?? []).map((store) => Number(store.id)),
+              active: !member.active,
             })
           ).user;
       setTeam((items) =>
@@ -2224,18 +2020,12 @@ function POS() {
         ? isDemo
           ? { ...editingSupplier, ...supplier }
           : (
-              await requestApi(`/suppliers/${editingSupplier.id}`, {
-                method: "PUT",
-                body: JSON.stringify(supplier),
-              })
+              await updateSupplier(editingSupplier.id, supplier)
             ).supplier
         : isDemo
           ? { ...supplier, id: Date.now(), createdAt: Date.now() }
           : (
-              await requestApi("/suppliers", {
-                method: "POST",
-                body: JSON.stringify(supplier),
-              })
+              await createSupplierRequest(supplier)
             ).supplier;
       if (editingSupplier) {
         setSuppliers((items) =>
@@ -2295,18 +2085,12 @@ function POS() {
         ? isDemo
           ? { ...editingCustomer, ...customer }
           : (
-              await requestApi(`/customers/${editingCustomer.id}`, {
-                method: "PUT",
-                body: JSON.stringify(customer),
-              })
+              await updateCustomer(editingCustomer.id, customer)
             ).customer
         : isDemo
           ? { ...customer, id: Date.now(), createdAt: Date.now() }
           : (
-              await requestApi("/customers", {
-                method: "POST",
-                body: JSON.stringify(customer),
-              })
+              await createCustomer(customer)
             ).customer;
       if (editingCustomer) {
         setCustomers((items) =>
@@ -2357,9 +2141,7 @@ function POS() {
         setCustomerHistory(customerSales.slice(0, 50));
         setCustomerHistoryTotal(customerSales.length);
       } else {
-        const result = await requestApi(
-          `/customers/${customer.id}/history?page=1&pageSize=50`,
-        );
+        const result = await getCustomerHistory(customer.id);
         setViewingCustomerHistory(result.customer);
         setCustomerHistory(result.sales);
         setCustomerHistoryTotal(result.total);
@@ -2388,9 +2170,7 @@ function POS() {
           customerSales.slice((pageNumber - 1) * 50, pageNumber * 50),
         );
       } else {
-        const result = await requestApi(
-          `/customers/${viewingCustomerHistory.id}/history?page=${pageNumber}&pageSize=50`,
-        );
+        const result = await getCustomerHistory(viewingCustomerHistory.id, pageNumber);
         setCustomerHistory(result.sales);
         setCustomerHistoryTotal(result.total);
       }
@@ -2434,9 +2214,7 @@ function POS() {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date());
-  const visibleNavItems = navItems.filter(
-    (item) => !item.roles || item.roles.includes(user?.role),
-  );
+  const visibleNavItems = getVisiblePages(user?.role, navigationItems, isDemo);
   const goToPage = (nextPage) => {
     setMobileNavOpen(false);
     if (nextPage === "settings" && !["owner", "manager"].includes(user?.role)) {
@@ -2493,7 +2271,7 @@ function POS() {
       if (isDemo) {
         setStockReport(makeDemoReport(products, stockMovements));
       } else {
-        const { report } = await requestApi("/inventory/report");
+        const { report } = await getInventoryReport();
         setStockReport(report);
       }
     } catch (error) {
@@ -2517,13 +2295,10 @@ function POS() {
     setAuthError("");
     const formData = new FormData(event.currentTarget);
     try {
-      const { user: activeUser } = await requestApi("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({
-          email: formData.get("email"),
-          password: formData.get("password"),
-        }),
-      });
+      const { user: activeUser } = await signIn(
+        formData.get("email"),
+        formData.get("password"),
+      );
       localStorage.removeItem("counterpoint-demo-mode");
       await loadWorkspace(activeUser);
     } catch (error) {
@@ -2537,7 +2312,7 @@ function POS() {
     setMode("loading");
     setAuthError("");
     try {
-      const { user: activeUser } = await requestApi("/auth/session");
+      const { user: activeUser } = await getSession();
       await loadWorkspace(activeUser);
     } catch (error) {
       if (error.status === 401) {
@@ -2554,7 +2329,7 @@ function POS() {
       localStorage.removeItem("counterpoint-demo-mode");
     } else {
       try {
-        await requestApi("/auth/logout", { method: "POST" });
+        await signOutSession();
       } catch (error) {
         setToast(error.message);
         return;
@@ -2609,176 +2384,24 @@ function POS() {
     setMode("demo");
   }
 
-  if (mode === "loading") {
+  if (["loading", "password-change-required", "auth-error", "login"].includes(mode)) {
     return (
-      <div className="auth-screen">
-        <div className="auth-card auth-loading">
-          <div className="brand-mark">
-            <Command size={20} />
-          </div>
-          <strong>Connecting to your store…</strong>
-        </div>
-      </div>
+      <AuthGate
+        mode={mode}
+        error={authError}
+        loginBusy={loginBusy}
+        passwordChangeBusy={passwordChangeBusy}
+        showLoginPassword={showLoginPassword}
+        showPasswordChangeFields={showPasswordChangeFields}
+        onLogin={submitLogin}
+        onPasswordChange={changeOwnPassword}
+        onToggleLoginPassword={() => setShowLoginPassword((visible) => !visible)}
+        onTogglePasswordVisibility={() => setShowPasswordChangeFields((visible) => !visible)}
+        onRetry={restoreSession}
+        onEnterDemo={enterDemo}
+      />
     );
   }
-
-  if (mode === "password-change-required") {
-    return (
-      <div className="auth-screen">
-        <form className="auth-card login-card" onSubmit={changeOwnPassword}>
-          <div className="login-logo" aria-hidden="true">
-            <KeyRound size={30} />
-          </div>
-          <div className="login-intro">
-            <p className="eyebrow login-eyebrow">ACCOUNT SECURITY</p>
-            <h1>Set a new password</h1>
-            <p className="auth-description">
-              Your temporary password must be replaced before you can use the
-              account.
-            </p>
-          </div>
-          {authError && (
-            <div className="auth-error" role="alert">
-              {authError}
-            </div>
-          )}
-          <label>
-            New password
-            <input
-              type={showPasswordChangeFields ? "text" : "password"}
-              name="newPassword"
-              autoComplete="new-password"
-              minLength="8"
-              maxLength="72"
-              required
-              autoFocus
-            />
-          </label>
-          <label>
-            Confirm new password
-            <input
-              type={showPasswordChangeFields ? "text" : "password"}
-              name="confirmPassword"
-              autoComplete="new-password"
-              minLength="8"
-              maxLength="72"
-              required
-            />
-          </label>
-          <button
-            type="button"
-            className="auth-demo-link"
-            aria-pressed={showPasswordChangeFields}
-            onClick={() => setShowPasswordChangeFields((visible) => !visible)}
-          >
-            {showPasswordChangeFields ? "Hide password" : "Show password"}
-          </button>
-          <button
-            className="primary-button auth-submit"
-            disabled={passwordChangeBusy}
-          >
-            {passwordChangeBusy ? "Changing password…" : "Set new password"}
-          </button>
-        </form>
-      </div>
-    );
-  }
-
-  if (mode === "auth-error") {
-    return (
-      <div className="auth-screen">
-        <div className="auth-card">
-          <a className="brand auth-brand" href="#">
-            <div className="brand-mark">
-              <Command size={20} />
-            </div>
-            <span>
-              counterpoint<span className="brand-period">.</span>
-            </span>
-          </a>
-          <h1>Can’t reach your store</h1>
-          <p className="auth-description">
-            {authError || "Check that the API server is running and try again."}
-          </p>
-          <button
-            className="primary-button auth-submit"
-            onClick={restoreSession}
-          >
-            Try again
-          </button>
-          <button className="auth-demo-link" onClick={enterDemo}>
-            Explore the local demo instead
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "login") {
-    return (
-      <div className="auth-screen">
-        <form className="auth-card login-card" onSubmit={submitLogin}>
-          <div className="login-logo" aria-hidden="true">
-            <Command size={35} strokeWidth={2.1} />
-          </div>
-          <div className="login-intro">
-            <p className="eyebrow login-eyebrow">WELCOME BACK</p>
-            <h1>Sign in to your POS account</h1>
-          </div>
-
-          {authError && (
-            <div className="auth-error" role="alert">
-              {authError}
-            </div>
-          )}
-          <label>
-            Email address
-            <input
-              type="email"
-              name="email"
-              autoComplete="username"
-              placeholder="you@yourstore.com"
-              aria-label="Email address"
-              required
-            />
-          </label>
-          <label>
-            Password
-            <span className="auth-password-field">
-              <input
-                type={showLoginPassword ? "text" : "password"}
-                name="password"
-                autoComplete="current-password"
-                aria-label="Password"
-                required
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                aria-label={
-                  showLoginPassword ? "Hide password" : "Show password"
-                }
-                aria-pressed={showLoginPassword}
-                onClick={() => setShowLoginPassword((visible) => !visible)}
-              >
-                {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </span>
-          </label>
-          <button className="primary-button auth-submit" disabled={loginBusy}>
-            {loginBusy ? "Signing in…" : "Sign in"}
-          </button>
-          <div className="auth-divider">
-            <span>or</span>
-          </div>
-          <button type="button" className="auth-demo-link" onClick={enterDemo}>
-            Explore the local demo
-          </button>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div
       className={`app-shell${page === "checkout" ? " app-shell--checkout" : ""}`}
@@ -2859,8 +2482,31 @@ function POS() {
           >
             {mobileNavOpen ? <X size={19} /> : <Menu size={19} />}
           </button>
+          <button
+            type="button"
+            className="global-search"
+            aria-label="Search products and open checkout"
+            onClick={() => {
+              goToPage("checkout");
+              window.requestAnimationFrame(() =>
+                window.requestAnimationFrame(() => productSearchRef.current?.focus()),
+              );
+            }}
+          >
+            <Search size={15} aria-hidden="true" />
+            <span>Search products</span>
+            <kbd>Ctrl K</kbd>
+          </button>
           <div className="header-store-picker">
-            <Building2 size={17} aria-hidden="true" />
+            <span className="header-store-avatar" aria-hidden="true">
+              {stores.find((store) => String(store.id) === activeStoreId)?.name
+                ?.split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part[0])
+                .join("")
+                .toUpperCase() || "ST"}
+            </span>
             <select
               aria-label="Switch store"
               value={activeStoreId}
@@ -2875,6 +2521,7 @@ function POS() {
                 </option>
               ))}
             </select>
+            <ChevronDown size={13} aria-hidden="true" />
           </div>
           <div className="topbar-actions">
             <span className="today-label">
@@ -2953,7 +2600,7 @@ function POS() {
               )}
               <button
                 type="button"
-                className="avatar-small"
+                className="header-account-trigger"
                 aria-label="Open account menu"
                 aria-haspopup="menu"
                 aria-expanded={showHeaderAccountMenu}
@@ -2961,12 +2608,16 @@ function POS() {
                   setShowHeaderAccountMenu((visible) => !visible);
                 }}
               >
-                {user?.name
-                  ?.split(/\s+/)
-                  .map((part) => part[0])
-                  .slice(0, 2)
-                  .join("")
-                  .toUpperCase()}
+                <span className="avatar-small" aria-hidden="true">
+                  {user?.name
+                    ?.split(/\s+/)
+                    .map((part) => part[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+                </span>
+                <span className="header-account-name">{user?.name}</span>
+                <ChevronDown size={13} aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -3008,12 +2659,8 @@ function POS() {
                     </span>
                   </div>
                   <div className="stat-detail">
-                    <div className="stat-main-line">
-                      <div className="stat-value">{money(dashboardRangeRevenue)}</div>
-                      <div className="sparkline" aria-hidden="true">{dashboardKpiTrend.slice(-7).map((day) => <i key={day.day} style={{ height: `${dashboardKpiTrend.length ? Math.max(12, (day.revenue / Math.max(1, ...dashboardKpiTrend.map((entry) => entry.revenue))) * 100) : 12}%` }} />)}</div>
-                    </div>
-                    <div className="stat-growth"><strong>{dashboardRangeOrders}</strong><span>orders in selected period</span></div>
-                    <div className="stat-submetrics"><span><small>Avg. order</small><strong>{money(dashboardRangeOrders ? dashboardRangeRevenue / dashboardRangeOrders : 0)}</strong></span><span><small>Products</small><strong>{products.length}</strong></span></div>
+                    <div className="stat-value">{money(dashboardRangeRevenue)}</div>
+                    <div className="stat-foot">Revenue in selected period</div>
                   </div>
                 </article>
                 <article className="stat-card">
@@ -3025,8 +2672,7 @@ function POS() {
                   </div>
                   <div className="stat-detail">
                     <div className="stat-value">{dashboardRangeOrders}</div>
-                    <div className="stat-foot">Completed in selected period</div>
-                    <div className="stat-order-bars" aria-hidden="true">{dashboardKpiTrend.slice(-7).map((day) => <i key={day.day} style={{ height: `${Math.max(7, dashboardKpiTrend.length ? (day.count / Math.max(1, ...dashboardKpiTrend.map((entry) => entry.count))) * 100 : 7)}%` }} />)}</div>
+                    <div className="stat-foot">Orders in selected period</div>
                   </div>
                 </article>
                 <article className="stat-card">
@@ -3041,8 +2687,7 @@ function POS() {
                       {products.reduce((sum, product) => sum + product.stock, 0)}
                       <small> units</small>
                     </div>
-                    <div className="stat-foot">Across {products.length} products</div>
-                    <div className="stock-segment-bar" aria-label={`${inStock.length} healthy products, ${lowStock.length} low stock, ${outOfStock.length} out of stock`}><i className="healthy" style={{ width: `${products.length ? inStock.length / products.length * 100 : 0}%` }} /><i className="low" style={{ width: `${products.length ? lowStock.length / products.length * 100 : 0}%` }} /><i className="empty" style={{ width: `${products.length ? outOfStock.length / products.length * 100 : 0}%` }} /></div>
+                    <div className="stat-foot">Available inventory units</div>
                   </div>
                 </article>
                 <article className="stat-card">
@@ -3054,8 +2699,8 @@ function POS() {
                   </div>
                   <div className="stat-detail">
                     <div className="stat-value stat-low-stock-number">{lowStock.length + outOfStock.length}<small> items</small></div>
-                    <div className="stat-warning-pill"><i />{lowStock.length + outOfStock.length ? "Needs attention" : "All stock healthy"}</div>
-                    <div className="stat-low-stock-bottom"><div className="stat-product-stack">{[...outOfStock, ...lowStock].slice(0, 3).map((product) => <ProductArtwork key={product.id} product={product} compact />)}</div><button type="button" onClick={() => { setInventoryLowStockOnly(true); goToPage("inventory"); }}>Review <ArrowUpRight size={14} /></button></div>
+                    <div className="stat-foot">{lowStock.length + outOfStock.length ? "Items to restock" : "All stock healthy"}</div>
+                    <div className="stat-low-stock-bottom"><button type="button" onClick={() => { setInventoryLowStockOnly(true); goToPage("inventory"); }}>Review inventory <ArrowUpRight size={14} /></button></div>
                   </div>
                 </article>
               </section>
@@ -3083,14 +2728,14 @@ function POS() {
                     <>
                     <div className="sales-table-head"><span>Customer</span><span>Product</span><span>Amount</span><span>Status</span><span>Date</span></div>
                     <div className="sales-list">
-                      {sales.filter((sale) => `${sale.customerName ?? "Walk-in customer"} ${sale.itemsDetail?.map((item) => item.productName ?? item.name).join(" ") ?? ""} ${sale.id}`.toLowerCase().includes(dashboardSalesQuery.toLowerCase())).slice(0, 5).map((sale) => (
+                      {sales.filter((sale) => `${sale.customerName ?? "Walk-in customer"} ${sale.firstProductName ?? sale.itemsDetail?.map((item) => item.productName ?? item.name).join(" ") ?? ""} ${sale.id}`.toLowerCase().includes(dashboardSalesQuery.toLowerCase())).slice(0, 5).map((sale) => (
                         <div className="sale-row dashboard-sale-row" key={sale.id}>
                           <span className="customer-initials">{(sale.customerName ?? "Walk-in").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span>
                           <div className="sale-details">
                             <strong>{sale.customerName ?? "Walk-in customer"}</strong>
                             <span>#{String(sale.id).slice(-8)}</span>
                           </div>
-                          <span className="sale-product-name">{sale.itemsDetail?.[0]?.productName ?? sale.itemsDetail?.[0]?.name ?? `${sale.items} items`}</span>
+                          <span className="sale-product-name">{sale.firstProductName || sale.itemsDetail?.[0]?.productName || sale.itemsDetail?.[0]?.name || `${sale.items} items`}</span>
                           <strong className="sale-total">
                             {money(sale.total)}
                           </strong>
@@ -3177,18 +2822,8 @@ function POS() {
                     </div>
                     <div className="dashboard-chart-tabs"><button type="button" className={dashboardChartMode === "revenue" ? "is-active" : ""} onClick={() => setDashboardChartMode("revenue")}>Revenue</button><button type="button" className={dashboardChartMode === "orders" ? "is-active" : ""} onClick={() => setDashboardChartMode("orders")}>Orders</button></div>
                   </div>
-                  <div className="heatmap-summary"><span>Total revenue</span><strong>{money(dashboardRangeRevenue)}</strong><span className="heatmap-order-total">{dashboardRangeOrders} orders</span></div>
-                  <div className="sales-heatmap" role="img" aria-label={`Sales ${dashboardChartMode} heatmap for ${dashboardCustomRange ? dashboardPeriod : 30} days`}>
-                    <div className="heatmap-axis"><span>{dashboardChartMode === "revenue" ? "High" : "More"}</span><span>Low</span></div>
-                    <div className="heatmap-columns" style={{ gridTemplateColumns: `repeat(${dashboardTrend.length}, minmax(10px, 1fr))` }}>
-                      {dashboardTrend.map((entry, index) => {
-                        const value = dashboardChartMode === "orders" ? entry.count : entry.revenue;
-                        const max = dashboardChartMode === "orders" ? Math.max(1, ...dashboardTrend.map((day) => day.count)) : dashboardTrendMax;
-                        const level = value ? Math.max(1, Math.ceil((value / max) * 7)) : 0;
-                        return <div className="heatmap-column" key={entry.day} title={`${entry.day} · ${entry.count} orders · ${money(entry.revenue)}`}><div className="heatmap-cells">{Array.from({ length: 7 }, (_, cell) => <span key={cell} className={cell >= 7 - level ? `heat-${Math.max(1, Math.ceil(level / 2))}` : ""} />)}</div><small>{index % Math.max(1, Math.ceil(dashboardTrend.length / 7)) === 0 || index === dashboardTrend.length - 1 ? new Date(`${entry.day}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""}</small></div>;
-                      })}
-                    </div>
-                  </div>
+                  <div className="trend-chart-summary"><span>{dashboardChartMode === "revenue" ? "Revenue" : "Orders"}</span><strong>{dashboardChartMode === "revenue" ? money(dashboardRangeRevenue) : dashboardRangeOrders.toLocaleString()}</strong><small>{dashboardKpiTrend.length} days</small></div>
+                  <SalesTrendChart entries={dashboardKpiTrend} mode={dashboardChartMode} money={money} />
                 </article>
 
                 <article className="panel insight-panel payment-insight-panel">
@@ -3255,768 +2890,103 @@ function POS() {
             </section>
           )}
 
-          {page === "settings" &&
-            settingsSection === "stores" &&
-            ["owner", "manager"].includes(user?.role) && (
-              <>
-                <section className="welcome-row">
-                  <div>
-                    <h1>Stores</h1>
-                    <p className="page-subtitle">
-                      {isDemo
-                        ? "Connect a store account to add locations with separate inventory."
-                        : user?.role === "owner"
-                          ? "Create and edit locations, then assign staff to each store."
-                          : "View all store locations. Only an administrator can add or edit stores."}
-                    </p>
-                  </div>
-                  {user?.role === "owner" && (
-                    <button
-                      className="primary-button"
-                      disabled={isDemo}
-                      onClick={() => {
-                        setEditingStore(null);
-                        setShowStoreForm(true);
-                      }}
-                    >
-                      <Plus size={17} /> Add branch
-                    </button>
-                  )}
-                </section>
-                <section className="panel inventory-table-panel">
-                  <div className="table-heading">
-                    <div>
-                      <h2>Stores</h2>
-                      <p>
-                        {managementStores.length} location
-                        {managementStores.length === 1 ? "" : "s"} visible to
-                        your account
-                      </p>
-                    </div>
-                  </div>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>STORE / BRAND</th>
-                          <th>BRANCH &amp; LOCATION</th>
-                          <th>CONTACT</th>
-                          <th>ACCESS</th>
-                          <th>STATUS</th>
-                          {user?.role === "owner" && <th>ACTIONS</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {managementStores.map((store) => (
-                          <tr key={store.id}>
-                            <td>
-                              <strong>{store.name}</strong>
-                            </td>
-                            <td>
-                              <strong>{store.branch || "—"}</strong>
-                              {store.location && (
-                                <small>{store.location}</small>
-                              )}
-                            </td>
-                            <td>
-                              {store.phone && <small>{store.phone}</small>}
-                              {store.email && <small>{store.email}</small>}
-                              {!store.phone && !store.email && "—"}
-                            </td>
-                            <td>All stores</td>
-                            <td>
-                              <span
-                                className={`status-pill ${store.active ? "status-ok" : "status-out"}`}
-                              >
-                                <i />
-                                {store.active ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                            {user?.role === "owner" && (
-                              <td>
-                                <div className="row-actions">
-                                  <button
-                                    type="button"
-                                    aria-label={`Edit ${storeLabel(store)}`}
-                                    title="Edit branch"
-                                    disabled={isDemo}
-                                    onClick={() => {
-                                      setEditingStore(store);
-                                      setShowStoreForm(true);
-                                    }}
-                                  >
-                                    <Pencil size={14} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label={`${store.active ? "Deactivate" : "Activate"} ${storeLabel(store)}`}
-                                    title={
-                                      store.active
-                                        ? "Deactivate store"
-                                        : "Activate store"
-                                    }
-                                    disabled={isDemo}
-                                    onClick={() =>
-                                      void toggleStoreStatus(store)
-                                    }
-                                  >
-                                    {store.active ? (
-                                      <X size={14} />
-                                    ) : (
-                                      <Check size={14} />
-                                    )}
-                                  </button>
-                                </div>
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                        {managementStores.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={user?.role === "owner" ? 6 : 5}
-                              className="table-empty"
-                            >
-                              No stores found.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </>
-            )}
-
-          {page === "settings" &&
-            settingsSection === "team" &&
-            ["owner", "manager"].includes(user?.role) && (
-              <>
-                <section className="welcome-row">
-                  <div>
-                    <h1>Team</h1>
-                    <p className="page-subtitle">
-                      Manage staff accounts and their store roles.
-                    </p>
-                  </div>
-                  <button
-                    className="primary-button"
-                    onClick={() => openTeamForm()}
-                  >
-                    <Plus size={17} /> Add team member
-                  </button>
-                </section>
-                <section className="panel inventory-table-panel">
-                  <div className="table-heading">
-                    <div>
-                      <h2>Team members</h2>
-                      <p>Manage managers and cashiers across stores.</p>
-                    </div>
-                  </div>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>NAME</th>
-                          <th>EMAIL</th>
-                          <th>ROLE</th>
-                          <th>STORES</th>
-                          <th>STATUS</th>
-                          <th>ACTIONS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {team.map((member) => (
-                          <tr key={member.id}>
-                            <td>
-                              <div className="team-person">
-                                <div className="profile-avatar">
-                                  {member.name
-                                    .split(/\s+/)
-                                    .map((part) => part[0])
-                                    .slice(0, 2)
-                                    .join("")
-                                    .toUpperCase()}
-                                </div>
-                                <strong>{member.name}</strong>
-                              </div>
-                            </td>
-                            <td>{member.email}</td>
-                            <td>
-                              <span className="role-pill">
-                                {member.role === "owner"
-                                  ? "Administrator"
-                                  : member.role}
-                              </span>
-                            </td>
-                            <td>
-                              {(member.stores ?? [])
-                                .map(storeLabel)
-                                .filter(Boolean)
-                                .join(", ") || "—"}
-                            </td>
-                            <td>
-                              <span
-                                className={`status-pill ${member.active ? "status-ok" : "status-out"}`}
-                              >
-                                <i />
-                                {member.active ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                            <td>
-                              {member.role === "cashier" ||
-                              ((user?.role === "owner" ||
-                                user?.role === "manager") &&
-                                member.role === "manager") ? (
-                                <div className="row-actions">
-                                  <button
-                                    type="button"
-                                    aria-label={`Edit ${member.name}`}
-                                    title={`Edit ${member.role}`}
-                                    onClick={() => openTeamForm(member)}
-                                  >
-                                    <Pencil size={14} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label={`Reset password for ${member.name}`}
-                                    title="Reset password"
-                                    disabled={
-                                      teamActionBusyId === String(member.id)
-                                    }
-                                    onClick={() =>
-                                      void resetTeamMemberPassword(member)
-                                    }
-                                  >
-                                    <KeyRound size={14} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label={`${member.active ? "Deactivate" : "Activate"} ${member.name}`}
-                                    title={
-                                      member.active
-                                        ? `Deactivate ${member.role}`
-                                        : `Activate ${member.role}`
-                                    }
-                                    disabled={
-                                      teamActionBusyId === String(member.id)
-                                    }
-                                    onClick={() =>
-                                      void toggleCashierStatus(member)
-                                    }
-                                  >
-                                    {member.active ? (
-                                      <X size={14} />
-                                    ) : (
-                                      <Check size={14} />
-                                    )}
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="optional-label">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                        {team.length === 0 && (
-                          <tr>
-                            <td colSpan="6" className="table-empty">
-                              No team members are assigned to this store.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </>
-            )}
-
+          {page === "settings" && settingsSection === "stores" && ["owner", "manager"].includes(user?.role) && (
+            <StoresPage
+              stores={managementStores}
+              role={user?.role}
+              isDemo={isDemo}
+              storeLabel={storeLabel}
+              onAdd={() => { setEditingStore(null); setShowStoreForm(true); }}
+              onEdit={(store) => { setEditingStore(store); setShowStoreForm(true); }}
+              onToggleStatus={(store) => void toggleStoreStatus(store)}
+            />
+          )}
+          {page === "settings" && settingsSection === "team" && ["owner", "manager"].includes(user?.role) && (
+            <TeamPage
+              members={team}
+              role={user?.role}
+              busyId={teamActionBusyId}
+              storeLabel={storeLabel}
+              onAdd={() => openTeamForm()}
+              onEdit={(member) => openTeamForm(member)}
+              onResetPassword={(member) => void resetTeamMemberPassword(member)}
+              onToggleStatus={(member) => void toggleCashierStatus(member)}
+            />
+          )}
           {page === "suppliers" && canManageInventory && (
-            <>
-              <section className="welcome-row">
-                <div>
-                  <h1>{pageTitle}</h1>
-                  <p className="page-subtitle">
-                    Keep supplier details here and assign them to products.
-                  </p>
-                </div>
-                {canManageCatalog && (
-                  <button
-                    className="primary-button"
-                    onClick={() => {
-                      setEditingSupplier(null);
-                      setShowSupplierForm(true);
-                    }}
-                  >
-                    <Plus size={17} /> Add Supplier
-                  </button>
-                )}
-              </section>
-              <section className="panel inventory-table-panel">
-                <div className="table-heading">
-                  <div>
-                    <h2>Supplier directory</h2>
-                    <p>
-                      {suppliers.length} suppliers available for product
-                      selection
-                    </p>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>SUPPLIER</th>
-                        <th>CONTACT PERSON</th>
-                        <th>EMAIL</th>
-                        <th>PHONE</th>
-                        <th>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {suppliers.map((supplier) => (
-                        <tr key={supplier.id}>
-                          <td>
-                            <strong>{supplier.name}</strong>
-                          </td>
-                          <td>{supplier.contactName || "—"}</td>
-                          <td>{supplier.email || "—"}</td>
-                          <td>{supplier.phone || "—"}</td>
-                          <td>
-                            <div className="row-actions">
-                              {canManageCatalog && (
-                                <button
-                                  aria-label={`Edit ${supplier.name}`}
-                                  title="Edit supplier"
-                                  onClick={() => {
-                                    setEditingSupplier(supplier);
-                                    setShowSupplierForm(true);
-                                  }}
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {suppliers.length === 0 && (
-                        <tr>
-                          <td colSpan="5" className="table-empty">
-                            No suppliers yet. Add one to assign it to products.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </>
+            <SuppliersPage
+              suppliers={suppliers}
+              canManageCatalog={canManageCatalog}
+              onAdd={() => { setEditingSupplier(null); setShowSupplierForm(true); }}
+              onEdit={(supplier) => { setEditingSupplier(supplier); setShowSupplierForm(true); }}
+            />
           )}
 
           {page === "categories" && canManageInventory && (
-            <>
-              <section className="welcome-row">
-                <div>
-                  <h1>{pageTitle}</h1>
-                  <p className="page-subtitle">
-                    Manage the categories available for product classification.
-                  </p>
-                </div>
-                {canManageCatalog && (
-                  <button
-                    className="primary-button"
-                    onClick={() => {
-                      setEditingCategory(null);
-                      setShowCategoryForm(true);
-                    }}
-                  >
-                    <Plus size={17} /> Add Category
-                  </button>
-                )}
-              </section>
-              <section className="panel inventory-table-panel">
-                <div className="table-heading">
-                  <div>
-                    <h2>Product categories</h2>
-                    <p>
-                      {inventoryCategories.length} categories available when
-                      adding products
-                    </p>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>CATEGORY</th>
-                        <th>PRODUCTS</th>
-                        <th>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryCategories.map((item) => (
-                        <tr key={item.id}>
-                          <td>
-                            <strong>{item.name}</strong>
-                          </td>
-                          <td>
-                            {
-                              products.filter(
-                                (product) => product.category === item.name,
-                              ).length
-                            }
-                          </td>
-                          <td>
-                            <div className="row-actions">
-                              {canManageCatalog && (
-                                <button
-                                  aria-label={`Edit ${item.name}`}
-                                  title="Edit category"
-                                  onClick={() => {
-                                    setEditingCategory(item);
-                                    setShowCategoryForm(true);
-                                  }}
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {inventoryCategories.length === 0 && (
-                        <tr>
-                          <td colSpan="3" className="table-empty">
-                            No categories yet. Add one to use it on products.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </>
+            <CategoriesPage
+              categories={inventoryCategories}
+              products={products}
+              canManageCatalog={canManageCatalog}
+              onAdd={() => { setEditingCategory(null); setShowCategoryForm(true); }}
+              onEdit={(category) => { setEditingCategory(category); setShowCategoryForm(true); }}
+            />
           )}
-
           {page === "customers" && (
-            <>
-              <section className="welcome-row">
-                <div>
-                  <h1>{pageTitle}</h1>
-                  <p className="page-subtitle">
-                    Manage customer contact details and review their purchase
-                    history.
-                  </p>
-                </div>
-                <button
-                  className="primary-button"
-                  onClick={() => {
-                    setEditingCustomer(null);
-                    setShowCustomerForm(true);
-                  }}
-                >
-                  <Plus size={17} /> Add Customer
-                </button>
-              </section>
-              <section className="panel inventory-table-panel">
-                <div className="table-heading">
-                  <div>
-                    <h2>Customers</h2>
-                    <p>{customers.length} customer records</p>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>CUSTOMER</th>
-                        <th>PHONE</th>
-                        <th>EMAIL</th>
-                        <th>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {customers.map((customer) => (
-                        <tr key={customer.id}>
-                          <td>
-                            <strong>{customer.name}</strong>
-                          </td>
-                          <td>{customer.phone || "—"}</td>
-                          <td>{customer.email || "—"}</td>
-                          <td>
-                            <div className="row-actions">
-                              <button
-                                aria-label={`Edit ${customer.name}`}
-                                title="Edit customer"
-                                onClick={() => {
-                                  setEditingCustomer(customer);
-                                  setShowCustomerForm(true);
-                                }}
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                aria-label={`View history for ${customer.name}`}
-                                title="View purchase history"
-                                onClick={() =>
-                                  void viewCustomerHistory(customer)
-                                }
-                              >
-                                <Clock3 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {customers.length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="table-empty">
-                            No customers yet. Add a customer to associate them
-                            with sales.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </>
+            <CustomersPage
+              customers={filterCustomers(customers, customerSearch)}
+              search={customerSearch}
+              onSearchChange={setCustomerSearch}
+              onAdd={() => { setEditingCustomer(null); setShowCustomerForm(true); }}
+              onEdit={(customer) => { setEditingCustomer(customer); setShowCustomerForm(true); }}
+              onHistory={(customer) => void viewCustomerHistory(customer)}
+            />
           )}
 
           {page === "customer-history" && viewingCustomerHistory && (
-            <>
-              <section className="welcome-row">
-                <div>
-                  <p className="eyebrow">CUSTOMER PURCHASES</p>
-                  <h1>{viewingCustomerHistory.name}</h1>
-                  <p className="page-subtitle">
-                    {viewingCustomerHistory.email ||
-                      viewingCustomerHistory.phone ||
-                      "Purchase history"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => setPage("customers")}
-                >
-                  <ArrowLeft size={15} /> Back to customers
-                </button>
-              </section>
-              {customerHistoryBusy ? (
-                <div className="panel report-loading">
-                  Loading customer history…
-                </div>
-              ) : (
-                <section className="panel inventory-table-panel">
-                  <div className="table-heading">
-                    <div>
-                      <h2>Purchase history</h2>
-                      <p>
-                        {customerHistoryTotal} completed sales
-                        {customerHistoryTotal > customerHistory.length
-                          ? ` · showing ${customerHistory.length} on this page`
-                          : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ORDER</th>
-                          <th>DATE</th>
-                          <th>ITEMS</th>
-                          <th>PAYMENT</th>
-                          <th>TOTAL</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {customerHistory.map((sale) => (
-                          <tr key={sale.id}>
-                            <td>
-                              <strong className="order-id">{sale.id}</strong>
-                            </td>
-                            <td>
-                              {new Intl.DateTimeFormat("en-GH", {
-                                dateStyle: "medium",
-                                timeStyle: "short",
-                              }).format(sale.date)}
-                            </td>
-                            <td>{sale.itemCount ?? sale.items}</td>
-                            <td>
-                              <span className="payment-tag">{sale.method}</span>
-                            </td>
-                            <td className="price-cell">{money(sale.total)}</td>
-                          </tr>
-                        ))}
-                        {customerHistory.length === 0 && (
-                          <tr>
-                            <td colSpan="5" className="table-empty">
-                              No purchases recorded for this customer.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {customerHistory.map((sale) => (
-                    <div
-                      className="customer-history-items"
-                      key={`${sale.id}-items`}
-                    >
-                      <strong>{sale.id}</strong>
-                      {sale.items?.map((item, index) => (
-                        <span key={`${sale.id}-${index}`}>
-                          {item.productName ?? item.name} × {item.quantity} —{" "}
-                          {money(
-                            item.lineTotal ?? item.unitPrice * item.quantity,
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  ))}
-                  <div className="sales-pagination">
-                    <span>
-                      {customerHistoryTotal === 0
-                        ? "No purchases"
-                        : `${(customerHistoryPage - 1) * 50 + 1}–${Math.min(customerHistoryPage * 50, customerHistoryTotal)} of ${customerHistoryTotal}`}
-                    </span>
-                    <div>
-                      <button
-                        type="button"
-                        disabled={
-                          customerHistoryBusy || customerHistoryPage <= 1
-                        }
-                        onClick={() =>
-                          void loadCustomerHistoryPage(customerHistoryPage - 1)
-                        }
-                      >
-                        Previous
-                      </button>
-                      <span>
-                        Page {customerHistoryPage} of{" "}
-                        {Math.max(1, Math.ceil(customerHistoryTotal / 50))}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={
-                          customerHistoryBusy ||
-                          customerHistoryPage >=
-                            Math.ceil(customerHistoryTotal / 50)
-                        }
-                        onClick={() =>
-                          void loadCustomerHistoryPage(customerHistoryPage + 1)
-                        }
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              )}
-            </>
+            <CustomerHistoryPage
+              customer={viewingCustomerHistory}
+              sales={customerHistory}
+              total={customerHistoryTotal}
+              page={customerHistoryPage}
+              busy={customerHistoryBusy}
+              formatMoney={money}
+              onBack={() => setPage("customers")}
+              onPageChange={(pageNumber) => void loadCustomerHistoryPage(pageNumber)}
+            />
           )}
-
           {page === "checkout" && (
             <>
-              <section className="welcome-row compact-welcome">
+              <section className="welcome-row compact-welcome pos-page-heading">
                 <div>
+                  <p className="pos-section-kicker">SALES REGISTER</p>
                   <h1>{pageTitle}</h1>
                   <p className="page-subtitle">
-                    Search for items, build the order, and take payment.
+                    Build the order, confirm payment, and complete the sale.
                   </p>
                 </div>
                 <div className="register-status">
                   <span className="online-dot" /> Register open
                 </div>
               </section>
-              <section className="checkout-layout">
-                <div className="catalog-panel">
-                  <div className="catalog-heading">
-                    <div>
-                      <h2>Find products</h2>
-                      <p>Search by product name or SKU</p>
-                    </div>
-                    {productSearchTerm && (
-                      <span className="catalog-result-count" aria-live="polite">
-                        {filteredProducts.length}{" "}
-                        {filteredProducts.length === 1 ? "item" : "items"} found
-                      </span>
-                    )}
-                  </div>
-                  <div className="catalog-toolbar">
-                    <div className="catalog-search-control">
-                      <label className="search-field">
-                        <Search size={18} aria-hidden="true" />
-                        <input
-                          ref={productSearchRef}
-                          value={query}
-                          onChange={(event) => setQuery(event.target.value)}
-                          placeholder="Search products by name or SKU"
-                          aria-label="Search products"
-                          aria-controls="checkout-product-results"
-                          autoComplete="off"
-                        />
-                        <kbd>Ctrl / ⌘ K</kbd>
-                      </label>
-                      {query && (
-                        <button
-                          type="button"
-                          className="search-clear"
-                          aria-label="Clear product search"
-                          onClick={() => setQuery("")}
-                        >
-                          <X size={15} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="product-grid" id="checkout-product-results">
-                    {filteredProducts.map((product) => (
-                      <button
-                        className="catalog-product"
-                        key={product.id}
-                        disabled={checkoutLocked}
-                        onClick={() => addToCart(product)}
-                      >
-                        <ProductArtwork product={product} />
-                        <span className="catalog-product-info">
-                          <strong>{product.name}</strong>
-                          <span className="catalog-product-sku">
-                            SKU {product.sku}
-                          </span>
-                          <span className="catalog-price">
-                            {money(product.price)}
-                          </span>
-                        </span>
-                        <span
-                          className={`stock-count${product.stock <= 5 ? " stock-count--low" : ""}`}
-                        >
-                          {product.stock} left
-                        </span>
-                        <span className="add-product-icon">
-                          <Plus size={15} />
-                        </span>
-                      </button>
-                    ))}
-                    {filteredProducts.length === 0 && (
-                      <div className="empty-state catalog-empty">
-                        {productSearchTerm
-                          ? "No available products match your search."
-                          : "Start typing a product name or SKU to see matching items."}
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <section className="checkout-layout pos-checkout-layout" aria-label="Checkout workspace">
+                <CheckoutCatalog
+                  products={availableCheckoutProducts}
+                  productSearchTerm={productSearchTerm}
+                  productSearchRef={productSearchRef}
+                  query={query}
+                  onQueryChange={setQuery}
+                  onScanSku={addScannedProduct}
+                  checkoutLocked={checkoutLocked}
+                  onAddProduct={addToCart}
+                  formatMoney={money}
+                />
 
                 <aside
                   ref={cartPanelRef}
-                  className={`cart-panel${mobileCartExpanded ? "" : " cart-panel--mobile-collapsed"}`}
+                  className={`cart-panel pos-order-panel${mobileCartExpanded ? "" : " cart-panel--mobile-collapsed"}`}
+                  aria-label="Current order and payment"
                 >
-                  <div className="cart-heading">
+                  <div className="cart-heading pos-order-header">
                     <div>
                       <h2>
                         Cart ({cartCount} {cartCount === 1 ? "item" : "items"})
@@ -4060,48 +3030,17 @@ function POS() {
                       </button>
                     </div>
                   </div>
-                  <div className="checkout-select-row">
-                    <label className="customer-select">
-                      <div className="customer-icon">
-                        <Users size={17} />
-                      </div>
-                      <span>
-                        <small>Customer</small>
-                        <select
-                          aria-label="Select customer"
-                          value={selectedCustomerId}
-                          disabled={checkoutLocked}
-                          onChange={(event) =>
-                            setSelectedCustomerId(event.target.value)
-                          }
-                        >
-                          <option value="">Walk-in customer</option>
-                          {customers.map((customer) => (
-                            <option key={customer.id} value={customer.id}>
-                              {customer.name}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown
-                          className="customer-select-chevron"
-                          size={15}
-                          aria-hidden="true"
-                        />
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      className="customer-add-button"
-                      aria-label="Add customer"
-                      title="Add Customer"
+                  <div className="checkout-select-row pos-order-customer">
+                    <CheckoutCustomerPicker
+                      customers={customers}
+                      selectedCustomerId={selectedCustomerId}
                       disabled={checkoutLocked}
-                      onClick={() => {
+                      onSelect={setSelectedCustomerId}
+                      onAddCustomer={() => {
                         setEditingCustomer(null);
                         setShowCustomerForm(true);
                       }}
-                    >
-                      <Plus size={15} />
-                    </button>
+                    />
                   </div>
                   {heldOrders.length > 0 && (
                     <section className="held-orders">
@@ -4183,7 +3122,7 @@ function POS() {
                       </button>
                     </div>
                   )}
-                  <div className="cart-items">
+                  <div className="cart-items pos-order-items">
                     {cart.length === 0 ? (
                       <div className="cart-empty">
                         <div className="cart-empty-icon">
@@ -4197,15 +3136,14 @@ function POS() {
                     ) : (
                       cart.map((item) => {
                         const unitPrice = saleUnitPrice(item, item.quantity);
-                        const discountApplied = unitPrice < item.price;
                         return (
-                          <div className="cart-item" key={item.id}>
+                          <div className="cart-item pos-order-line" key={item.id}>
                             <ProductArtwork product={item} compact />
                             <div className="cart-item-copy">
                               <strong>{item.name}</strong>
                               <span>
                                 {money(unitPrice)} each
-                                {discountApplied ? " · Discount applied" : ""}
+                                {unitPrice < item.price ? " · Wholesale price applied" : ""}
                               </span>
                             </div>
                             <strong className="cart-line-total">
@@ -4218,11 +3156,7 @@ function POS() {
                               title={`Delete ${item.name}`}
                               disabled={checkoutLocked}
                               onClick={() =>
-                                setCart((items) =>
-                                  items.filter(
-                                    (cartItem) => cartItem.id !== item.id,
-                                  ),
-                                )
+                                setCart((items) => removeCartItem(items, item.id))
                               }
                             >
                               <Trash2 size={15} />
@@ -4257,22 +3191,23 @@ function POS() {
                       })
                     )}
                   </div>
-                  <div className="order-summary">
+                  <div className="pos-order-footer">
+                  <div className="order-summary pos-order-summary">
                     <div className="summary-total">
                       <span>Total</span>
                       <strong>{money(total)}</strong>
                     </div>
                   </div>
-                  <section className="payment-card" aria-label="Payment method">
+                  <section className="payment-card pos-order-payment" aria-label="Payment method">
                     <div className="payment-card-heading">
                       <div>
                         <h3>Payment method</h3>
                       </div>
-                    </div>
-                    <div className="payment-method-options">
-                      <div className="payment-method-option is-selected">
-                        <Banknote size={15} />
-                        <span>Cash</span>
+                      <div className="payment-method-options">
+                        <div className="payment-method-option is-selected">
+                          <Banknote size={15} />
+                          <span>Cash</span>
+                        </div>
                       </div>
                     </div>
                     <div className="cash-tender-fields">
@@ -4310,7 +3245,7 @@ function POS() {
                     </div>
                   </section>
                   <button
-                    className="charge-button"
+                    className="charge-button pos-order-submit"
                     disabled={!canCompleteSale}
                     onClick={completeSale}
                   >
@@ -4319,9 +3254,10 @@ function POS() {
                       ? "Completing sale…"
                       : `Complete Sale · ${money(total)}`}{" "}
                   </button>
+                  </div>
                 </aside>
               </section>
-              <div className="mobile-checkout-bar">
+              {!mobileCartExpanded && <div className="mobile-checkout-bar">
                 <div>
                   <span>
                     {cartCount} {cartCount === 1 ? "item" : "items"}
@@ -4343,7 +3279,7 @@ function POS() {
                 >
                   Review &amp; pay <ChevronDown size={16} />
                 </button>
-              </div>
+              </div>}
             </>
           )}
 
@@ -4423,172 +3359,23 @@ function POS() {
                   </button>
                 </div>
               )}
-              <section
-                ref={inventoryProductsRef}
-                id="inventory-products"
-                className="panel inventory-table-panel"
-                tabIndex={-1}
-              >
-                <div className="table-heading">
-                  <div>
-                    <h2>
-                      {inventoryLowStockOnly
-                        ? "Low-stock products"
-                        : "All products"}
-                    </h2>
-                    <p>
-                      {inventoryLowStockOnly
-                        ? `${filteredInventory.length} products need replenishment or are out of stock`
-                        : `${products.length} products in your catalog`}
-                    </p>
-                  </div>
-                  <div className="inventory-table-actions">
-                    <button
-                      type="button"
-                      className={`inventory-low-stock-toggle${inventoryLowStockOnly ? " is-active" : ""}`}
-                      aria-pressed={inventoryLowStockOnly}
-                      onClick={() =>
-                        setInventoryLowStockOnly((active) => !active)
-                      }
-                    >
-                      {inventoryLowStockOnly
-                        ? "Show all products"
-                        : "Low stock only"}
-                    </button>
-                    <label className="search-field inventory-search">
-                      <Search size={16} />
-                      <input
-                        value={inventoryQuery}
-                        onChange={(event) =>
-                          setInventoryQuery(event.target.value)
-                        }
-                        placeholder="Search name, SKU, supplier..."
-                        aria-label="Search inventory"
-                      />
-                    </label>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>PRODUCT</th>
-                        <th>SKU</th>
-                        <th>CATEGORY</th>
-                        <th>STOCK</th>
-                        <th>REORDER</th>
-                        <th>STATUS</th>
-                        <th>SELLING</th>
-                        {canManageInventory && (
-                          <>
-                            <th>COST</th>
-                            <th>WHOLESALE</th>
-                            <th>WHOLESALE QTY</th>
-                          </>
-                        )}
-                        <th>SUPPLIER</th>
-                        <th>MFT DATE</th>
-                        <th>EXPIRY</th>
-                        <th>DESCRIPTION</th>
-                        {canManageInventory && <th>ACTIONS</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredInventory.map((product) => (
-                        <tr
-                          key={product.id}
-                          className={
-                            inventoryLowStockOnly
-                              ? "inventory-attention-row"
-                              : ""
-                          }
-                        >
-                          <td>
-                            <div className="table-product">
-                              <ProductArtwork product={product} compact />
-                              <strong>{product.name}</strong>
-                            </div>
-                          </td>
-                          <td className="sku-cell">{product.sku}</td>
-                          <td>{product.category}</td>
-                          <td>{product.stock} units</td>
-                          <td>{product.reorderLevel} units</td>
-                          <td>
-                            <span
-                              className={`status-pill ${product.stock === 0 ? "status-out" : product.stock <= product.reorderLevel ? "status-low" : "status-ok"}`}
-                            >
-                              <i />
-                              {product.stock === 0
-                                ? "Out of stock"
-                                : product.stock <= product.reorderLevel
-                                  ? "Low stock"
-                                  : "In stock"}
-                            </span>
-                          </td>
-                          <td className="price-cell">{money(product.price)}</td>
-                          {canManageInventory && (
-                            <>
-                              <td>{money(product.costPrice)}</td>
-                              <td>{money(product.wholesalePrice)}</td>
-                              <td>
-                                {product.wholesaleQuantity > 0
-                                  ? `${product.wholesaleQuantity}+ units`
-                                  : "Not set"}
-                              </td>
-                            </>
-                          )}
-                          <td>{product.supplier || "—"}</td>
-                          <td>{product.mftDate || "—"}</td>
-                          <td>{product.expiryDate || "—"}</td>
-                          <td
-                            className="inventory-description-cell"
-                            title={product.productionDescription || ""}
-                          >
-                            {product.productionDescription || "—"}
-                          </td>
-                          {canManageInventory && (
-                            <td>
-                              <div className="row-actions">
-                                {canManageCatalog && (
-                                  <button
-                                    aria-label={`Edit ${product.name}`}
-                                    title="Edit Product"
-                                    onClick={() => {
-                                      setEditingProduct(product);
-                                      setShowProductForm(true);
-                                    }}
-                                  >
-                                    <Pencil size={14} />
-                                  </button>
-                                )}
-                                <button
-                                  aria-label={`Manage stock for ${product.name}`}
-                                  title="Manage stock"
-                                  onClick={() => setStockProduct(product)}
-                                >
-                                  <PackagePlus size={15} />
-                                </button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                      {filteredInventory.length === 0 && (
-                        <tr>
-                          <td
-                            colSpan={canManageInventory ? "15" : "11"}
-                            className="table-empty"
-                          >
-                            {inventoryLowStockOnly
-                              ? "No low-stock products match your search."
-                              : "No products match your search."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+              <InventoryTable
+                products={products}
+                filteredProducts={filteredInventory}
+                productsRef={inventoryProductsRef}
+                lowStockOnly={inventoryLowStockOnly}
+                onToggleLowStock={() => setInventoryLowStockOnly((active) => !active)}
+                search={inventoryQuery}
+                onSearchChange={setInventoryQuery}
+                canManageInventory={canManageInventory}
+                canManageCatalog={canManageCatalog}
+                formatMoney={money}
+                onEditProduct={(product) => {
+                  setEditingProduct(product);
+                  setShowProductForm(true);
+                }}
+                onManageStock={setStockProduct}
+              />
             </>
           )}
 
@@ -4839,235 +3626,34 @@ function POS() {
           )}
 
           {page === "sales" && (
-            <>
-              <section className="welcome-row">
-                <div>
-                  <h1>{pageTitle}</h1>
-                  <p className="page-subtitle">
-                    A clear view of all completed orders.
-                  </p>
-                </div>
-                <div className="report-actions">
-                  <button
-                    className="secondary-button report-print-action"
-                    onClick={printReport}
-                    disabled={displayedTransactions.length === 0}
-                  >
-                    <Printer size={15} /> Print page / Save PDF
-                  </button>
-                  <button
-                    className="primary-button report-screen-action"
-                    onClick={() => goToPage("checkout")}
-                  >
-                    <Plus size={17} /> New Sale
-                  </button>
-                </div>
-              </section>
-              <p className="report-print-meta">
-                Store: {activeStoreName} · Generated {reportGeneratedAt} ·
-                Showing {displayedTransactions.length} of {transactionTotal}{" "}
-                matching transactions (page {salesPage})
-              </p>
-              <section className="inventory-stats sales-metrics">
-                <div>
-                  <span>Revenue today</span>
-                  <strong>{money(todayRevenue)}</strong>
-                  <small>from {todaySaleCount} transactions</small>
-                </div>
-                <div>
-                  <span>Orders today</span>
-                  <strong>{todaySaleCount}</strong>
-                  <small>completed sales</small>
-                </div>
-                <div>
-                  <span>Average order</span>
-                  <strong>
-                    {money(todaySaleCount ? todayRevenue / todaySaleCount : 0)}
-                  </strong>
-                  <small>today’s average</small>
-                </div>
-                <div>
-                  <span>All transactions</span>
-                  <strong>{allSalesCount}</strong>
-                  <small>
-                    {user?.role === "cashier" && !isDemo
-                      ? "your transactions"
-                      : "recorded in the store"}
-                  </small>
-                </div>
-              </section>
-              <section className="panel inventory-table-panel sales-report-panel">
-                <div className="table-heading">
-                  <div>
-                    <h2>All transactions</h2>
-                    <p>Filter sales by date or search transactions</p>
-                  </div>
-                  <div className="sales-report-filters">
-                    <label className="sales-date-filter">
-                      <span>From</span>
-                      <input
-                        type="date"
-                        value={salesDateFrom}
-                        max={salesDateTo || undefined}
-                        onChange={(event) => {
-                          setSalesPage(1);
-                          setSalesDateFrom(event.target.value);
-                        }}
-                        aria-label="From date"
-                      />
-                    </label>
-                    <label className="sales-date-filter">
-                      <span>To</span>
-                      <input
-                        type="date"
-                        value={salesDateTo}
-                        min={salesDateFrom || undefined}
-                        onChange={(event) => {
-                          setSalesPage(1);
-                          setSalesDateTo(event.target.value);
-                        }}
-                        aria-label="To date"
-                      />
-                    </label>
-                    {(salesDateFrom || salesDateTo) && (
-                      <button
-                        type="button"
-                        className="sales-date-clear"
-                        onClick={() => {
-                          setSalesPage(1);
-                          setSalesDateFrom("");
-                          setSalesDateTo("");
-                        }}
-                      >
-                        Clear dates
-                      </button>
-                    )}
-                    <label className="search-field inventory-search transaction-search">
-                      <Search size={16} />
-                      <input
-                        value={transactionQuery}
-                        onChange={(event) => {
-                          setSalesPage(1);
-                          setTransactionQuery(event.target.value);
-                        }}
-                        placeholder="Search order, staff, customer, payment..."
-                        aria-label="Search transactions"
-                      />
-                    </label>
-                  </div>
-                </div>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>ORDER</th>
-                        <th>TIME</th>
-                        <th>STAFF</th>
-                        <th>CUSTOMER</th>
-                        <th>ITEMS</th>
-                        <th>PAYMENT</th>
-                        <th>STATUS</th>
-                        <th>TOTAL</th>
-                        <th>ACTIONS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedTransactions.map((sale) => (
-                        <tr key={sale.id}>
-                          <td>
-                            <strong className="order-id">{sale.id}</strong>
-                          </td>
-                          <td>
-                            {new Intl.DateTimeFormat("en-GH", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            }).format(sale.date)}
-                          </td>
-                          <td>{sale.cashierName ?? "—"}</td>
-                          <td>{sale.customerName ?? "Walk-in customer"}</td>
-                          <td>
-                            {sale.items} {sale.items === 1 ? "item" : "items"}
-                          </td>
-                          <td>
-                            <span className="payment-tag">{sale.method}</span>
-                          </td>
-                          <td>
-                            <span className="status-pill status-ok">
-                              <i />
-                              <Check size={12} /> Paid
-                            </span>
-                          </td>
-                          <td className="price-cell">{money(sale.total)}</td>
-                          <td>
-                            <div className="row-actions">
-                              <button
-                                aria-label={`View transaction ${sale.id}`}
-                                title="View transaction"
-                                disabled={receiptBusyId === sale.id}
-                                onClick={() =>
-                                  void openTransactionReceipt(sale)
-                                }
-                              >
-                                <FileText size={14} />
-                              </button>
-                              <button
-                                aria-label={`Reprint receipt ${sale.id}`}
-                                title="Reprint receipt"
-                                disabled={receiptBusyId === sale.id}
-                                onClick={() =>
-                                  void openTransactionReceipt(sale, true)
-                                }
-                              >
-                                <Printer size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {displayedTransactions.length === 0 && (
-                        <tr>
-                          <td colSpan="9" className="table-empty">
-                            {transactionTotal === 0
-                              ? "No sales have been recorded yet."
-                              : "No transactions match your search."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="sales-pagination">
-                  <span>
-                    {transactionTotal === 0
-                      ? "No transactions"
-                      : `${(salesPage - 1) * 50 + 1}–${Math.min(salesPage * 50, transactionTotal)} of ${transactionTotal}`}
-                  </span>
-                  <div>
-                    <button
-                      type="button"
-                      disabled={salesPage <= 1}
-                      onClick={() => setSalesPage((current) => current - 1)}
-                    >
-                      Previous
-                    </button>
-                    <span>
-                      Page {salesPage} of {transactionPages}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={salesPage >= transactionPages}
-                      onClick={() => setSalesPage((current) => current + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              </section>
-            </>
+            <SalesPage
+              title={pageTitle}
+              storeName={activeStoreName}
+              generatedAt={reportGeneratedAt}
+              sales={displayedTransactions}
+              total={transactionTotal}
+              page={salesPage}
+              pageCount={transactionPages}
+              dateFrom={salesDateFrom}
+              dateTo={salesDateTo}
+              search={transactionQuery}
+              busyId={receiptBusyId}
+              todayRevenue={todayRevenue}
+              todaySaleCount={todaySaleCount}
+              allSalesCount={allSalesCount}
+              isCashier={user?.role === "cashier" && !isDemo}
+              formatMoney={money}
+              onPrintReport={printReport}
+              onNewSale={() => goToPage("checkout")}
+              onDateFromChange={(value) => { setSalesPage(1); setSalesDateFrom(value); }}
+              onDateToChange={(value) => { setSalesPage(1); setSalesDateTo(value); }}
+              onClearDates={() => { setSalesPage(1); setSalesDateFrom(""); setSalesDateTo(""); }}
+              onSearchChange={(value) => { setSalesPage(1); setTransactionQuery(value); }}
+              onViewSale={(sale) => void openTransactionReceipt(sale)}
+              onPrintSale={(sale) => void openTransactionReceipt(sale, true)}
+              onPageChange={setSalesPage}
+            />
           )}
-
           <footer className="footer">
             <div className="footer-brand">
               <span className="footer-brand-mark">
@@ -5086,255 +3672,19 @@ function POS() {
       </main>
 
       {showProductForm && canManageCatalog && (
-        <AccessibleDialog
-          className="modal-backdrop"
-          labelledBy="product-dialog-heading"
-          onDismiss={() => {
-            setShowProductForm(false);
-            setEditingProduct(null);
-          }}
-        >
-          <form
-            className="product-modal product-modal--wide"
-            key={editingProduct?.id ?? "new-product"}
-            onSubmit={createProduct}
-          >
-            <div className="modal-heading">
-              <div>
-                <h2 id="product-dialog-heading">
-                  {editingProduct ? "Edit product" : "Add a Product"}
-                </h2>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="Close dialog"
-                onClick={() => {
-                  setShowProductForm(false);
-                  setEditingProduct(null);
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="product-form-grid">
-              <label>
-                Product Name
-                <input
-                  name="name"
-                  required
-                  maxLength="120"
-                  placeholder="e.g. Canvas tote bag"
-                  defaultValue={editingProduct?.name ?? ""}
-                />
-              </label>
-              {editingProduct ? (
-                <label>
-                  SKU
-                  <input
-                    name="sku"
-                    required
-                    maxLength="64"
-                    pattern={"[A-Za-z0-9][A-Za-z0-9._\\/\\x2d]{0,63}"}
-                    title="Use letters, numbers, dots, dashes, underscores, or slashes."
-                    defaultValue={editingProduct.sku}
-                    readOnly
-                  />
-                </label>
-              ) : null}
-              <label>
-                Production Description
-                <input
-                  name="productionDescription"
-                  maxLength="2000"
-                  placeholder="Add a product description"
-                  defaultValue={editingProduct?.productionDescription ?? ""}
-                />
-              </label>
-              <div className="product-supplier-field">
-                <label htmlFor="product-category">Category</label>
-                <select
-                  id="product-category"
-                  name="category"
-                  required
-                  defaultValue={editingProduct?.category ?? ""}
-                >
-                  <option value="" disabled>
-                    Select a Category
-                  </option>
-                  {inventoryCategories.map((item) => (
-                    <option key={item.id} value={item.name}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="supplier-add-link"
-                  onClick={() => setShowCategoryForm(true)}
-                >
-                  <Plus size={13} /> Add Category
-                </button>
-              </div>
-              <div className="product-supplier-field">
-                <label htmlFor="product-supplier">Supplier</label>
-                <select
-                  id="product-supplier"
-                  name="supplierId"
-                  defaultValue={editingProduct?.supplierId ?? ""}
-                >
-                  <option value="">No Supplier</option>
-                  {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="supplier-add-link"
-                  onClick={() => setShowSupplierForm(true)}
-                >
-                  <Plus size={13} /> Add Supplier
-                </button>
-              </div>
-
-              {!editingProduct && (
-                <div className="product-supplier-field">
-                  <label htmlFor="product-opening-stock">Opening Stock</label>
-                  <input
-                    id="product-opening-stock"
-                    name="stock"
-                    type="number"
-                    min="0"
-                    max="1000000"
-                    step="1"
-                    required
-                    placeholder="0"
-                    defaultValue="0"
-                  />
-                </div>
-              )}
-              <label>
-                Reorder Level
-                <input
-                  name="reorderLevel"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="1"
-                  required
-                  defaultValue={editingProduct?.reorderLevel ?? 5}
-                />
-              </label>
-
-              <label>
-                Selling Price (GHS)
-                <input
-                  name="price"
-                  type="number"
-                  min="0.01"
-                  max="1000000"
-                  step="0.01"
-                  required
-                  placeholder="0.00"
-                  defaultValue={editingProduct?.price ?? ""}
-                />
-              </label>
-              <div className="product-supplier-field">
-                <label htmlFor="product-cost-price">Cost Price (GHS)</label>
-                <input
-                  id="product-cost-price"
-                  name="costPrice"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="0.01"
-                  required
-                  placeholder="0.00"
-                  defaultValue={editingProduct?.costPrice ?? ""}
-                />
-              </div>
-              <label>
-                Wholesale Price (GHS)
-                <input
-                  name="wholesalePrice"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="0.01"
-                  required
-                  placeholder="0.00"
-                  defaultValue={editingProduct?.wholesalePrice ?? ""}
-                />
-              </label>
-              <label>
-                Wholesale Quantity
-                <input
-                  name="wholesaleQuantity"
-                  type="number"
-                  min="0"
-                  max="1000000"
-                  step="1"
-                  defaultValue={editingProduct?.wholesaleQuantity ?? 0}
-                />
-              </label>
-
-              <label>
-                MFT Date
-                <input
-                  name="mftDate"
-                  type="date"
-                  defaultValue={editingProduct?.mftDate ?? ""}
-                />
-              </label>
-              <label>
-                Expiry Date
-                <input
-                  name="expiryDate"
-                  type="date"
-                  defaultValue={editingProduct?.expiryDate ?? ""}
-                />
-              </label>
-            </div>
-            {!editingProduct && (
-              <div className="product-supplier-field">
-                <label htmlFor="product-store">Store</label>
-                <select
-                  id="product-store"
-                  name="storeId"
-                  required
-                  defaultValue={activeStoreId}
-                >
-                  {stores.map((store) => (
-                    <option key={store.id} value={store.id}>
-                      {storeLabel(store)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setShowProductForm(false);
-                  setEditingProduct(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="primary-button">
-                {editingProduct ? <Check size={16} /> : <Plus size={16} />}
-                {editingProduct ? "Save Changes" : "Add Product"}
-              </button>
-            </div>
-          </form>
-        </AccessibleDialog>
+        <ProductFormDialog
+          product={editingProduct}
+          categories={inventoryCategories}
+          suppliers={suppliers}
+          stores={stores}
+          activeStoreId={activeStoreId}
+          storeLabel={storeLabel}
+          onDismiss={() => { setShowProductForm(false); setEditingProduct(null); }}
+          onSubmit={createProduct}
+          onAddCategory={() => setShowCategoryForm(true)}
+          onAddSupplier={() => setShowSupplierForm(true)}
+        />
       )}
-
       {stockProduct && (
         <AccessibleDialog
           className="modal-backdrop"
