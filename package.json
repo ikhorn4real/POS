@@ -9,6 +9,9 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
+    "predev": "tsc -p shared/tsconfig.json",
+    "dev": "node apps/web/node_modules/vite/bin/vite.js --config apps/web/vite.config.js",
+    "dev:api": "node --watch apps/api/src/index.js",
     "lint": "oxlint apps/web apps/api shared tests",
     "test": "tsc -p shared/tsconfig.json && tsc -p tsconfig.json && node --test",
     "typecheck": "tsc -p shared/tsconfig.json && tsc -p tsconfig.json"

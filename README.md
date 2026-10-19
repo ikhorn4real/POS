@@ -21,13 +21,13 @@ A retail inventory and point-of-sale app using React, Vite, Node.js, Express, an
 5. Start the API in one terminal:
 
    ```powershell
-   pnpm --filter @counterpoint/api dev
+   npm run dev:api
    ```
 
 6. Start the Vite client in another terminal:
 
    ```powershell
-   pnpm --filter @counterpoint/web dev
+   npm run dev
    ```
 
    Open the local URL printed by Vite and sign in with `OWNER_EMAIL` and `OWNER_PASSWORD` from `.env`.
@@ -63,7 +63,7 @@ pnpm run typecheck
 pnpm --filter @counterpoint/web build
 ```
 
-`pnpm --filter @counterpoint/api start` starts the production API; after building the web package, it also serves the client. Set `NODE_ENV=production`, use HTTPS, a strong `SESSION_SECRET`, a production PostgreSQL connection with TLS where required, and set `WEB_ORIGIN` to the exact public origin. `PGSSL=true` enables TLS verification for PostgreSQL.
+`npm run dev:api` starts the API and `npm run dev` starts the web development server. `pnpm --filter @counterpoint/api start` starts the production API; after building the web package, it also serves the client. Set `NODE_ENV=production`, use HTTPS, a strong `SESSION_SECRET`, a production PostgreSQL connection with TLS where required, and set `WEB_ORIGIN` to the exact public origin. `PGSSL=true` enables TLS verification for PostgreSQL.
 
 The database initialization drops legacy tax breakdown columns when the API starts; stored transaction totals are preserved.
 
