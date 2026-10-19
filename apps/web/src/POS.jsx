@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { formatGhs, minorUnits } from "@counterpoint/shared/money";
 import { AccessibleDialog, ProductArtwork } from "./components/Common.jsx";
 import { NotificationCenter } from "./components/NotificationCenter.jsx";
 import { DashboardInventoryWatch } from "./components/Dashboard.jsx";
@@ -55,7 +56,7 @@ import { getVisiblePages } from "./app/permissions.js";
 import { navigationItems } from "./app/navigation.js";
 import { changePassword, getSession, signIn, signOut as signOutSession } from "./features/auth/auth-api.js";
 import { AuthGate } from "./features/auth/AuthGate.jsx";
-import { saleUnitPrice } from "./features/checkout/pricing.js";
+import { saleUnitPriceCents } from "./features/checkout/pricing.js";
 import { addCartItem, changeCartQuantity, removeCartItem, summarizeCart } from "./features/checkout/cart-model.js";
 import { CheckoutCatalog } from "./features/checkout/CheckoutCatalog.jsx";
 import { CheckoutCustomerPicker } from "./features/checkout/CheckoutCustomerPicker.jsx";
@@ -520,11 +521,8 @@ function makeDemoReport(products, movements, expiringWithinDays = 30) {
 }
 
 function money(value) {
-  return new Intl.NumberFormat("en-GH", {
-    style: "currency",
-    currency: "GHS",
-    maximumFractionDigits: 2,
-  }).format(value);
+  // API summary values are GHS decimals; this conversion is for display only.
+  return formatGhs(minorUnits(Math.round(value * 100)));
 }
 
 function localDateKey(value) {
@@ -1266,8 +1264,7 @@ function POS() {
         );
         return (
           !current ||
-          Math.round(saleUnitPrice(item, item.quantity) * 100) !==
-            current.unitPriceCents
+          saleUnitPriceCents(item, item.quantity) !== current.unitPriceCents
         );
       });
     setProducts((items) =>
@@ -1373,12 +1370,12 @@ function POS() {
           customerName: selectedCustomer?.name ?? "Walk-in customer",
           subtotal,
           itemsDetail: cart.map((item) => {
-            const unitPrice = saleUnitPrice(item, item.quantity);
+            const unitPriceCents = saleUnitPriceCents(item, item.quantity);
             return {
               productName: item.name,
               quantity: item.quantity,
-              unitPrice,
-              lineTotal: unitPrice * item.quantity,
+              unitPrice: unitPriceCents / 100,
+              lineTotal: (unitPriceCents * item.quantity) / 100,
             };
           }),
         };
@@ -2631,7 +2628,7 @@ function POS() {
                   <h1>{pageTitle}</h1>
                   <p className="page-subtitle">
                     {new Intl.DateTimeFormat("en-GH", { dateStyle: "full" }).format(new Date())}
-                    <span className="dashboard-attention"> · {lowStock.length + outOfStock.length} items need attention</span>
+                   
                   </p>
                 </div>
                 <div className="dashboard-toolbar">
@@ -3061,8 +3058,9 @@ function POS() {
                                 order.items.reduce(
                                   (sum, item) =>
                                     sum +
-                                    saleUnitPrice(item, item.quantity) *
-                                      item.quantity,
+                                    saleUnitPriceCents(item, item.quantity) *
+                                      item.quantity /
+                                      100,
                                   0,
                                 ),
                               )}
@@ -3135,7 +3133,8 @@ function POS() {
                       </div>
                     ) : (
                       cart.map((item) => {
-                        const unitPrice = saleUnitPrice(item, item.quantity);
+                        const unitPriceCents = saleUnitPriceCents(item, item.quantity);
+                        const unitPrice = unitPriceCents / 100;
                         return (
                           <div className="cart-item pos-order-line" key={item.id}>
                             <ProductArtwork product={item} compact />
@@ -3147,7 +3146,7 @@ function POS() {
                               </span>
                             </div>
                             <strong className="cart-line-total">
-                              {money(unitPrice * item.quantity)}
+                              {money((unitPriceCents * item.quantity) / 100)}
                             </strong>
                             <button
                               type="button"

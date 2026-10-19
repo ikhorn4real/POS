@@ -11,27 +11,22 @@ Build a fast, keyboard-friendly retail workspace with a clear cashier checkout, 
 - API permission middleware and store-scoped access checks.
 - Cash checkout with server price/stock verification, idempotency, held orders, receipt output, customer attachment, and stock movement recording.
 - Product catalog, categories, suppliers, customers, sales history, multi-store records, team management, and dashboard reporting.
-- A large single client module (`src/POS.jsx`) currently owns app state, API calls, demo mode, permissions, checkout, and most page rendering.
+- The client is in `apps/web`; a large module (`apps/web/src/POS.jsx`) still owns app state, API calls, demo mode, permissions, checkout, and most page rendering.
+- The Express API is in `apps/api/src`. `shared/src` contains typed permission and GHS minor-unit contracts; the rest of the client and API still use JavaScript.
 
 ## Target structure
 
 ```text
-src/
-  app/             app shell, routing, session and store context
-  features/
-    auth/           sign-in, password lifecycle, staff and roles
-    checkout/       catalog search, cart, tender, receipt, held orders
-    inventory/      catalog, receiving, adjustments, transfers, stocktake
-    customers/      profiles, purchase history, loyalty
-    sales/          transactions, refunds, exchanges
-    reports/        operational and financial reports
-    settings/       stores, taxes, payment methods, devices
-  shared/           API client, design system, dialogs, forms, money/date helpers
-server/
-  routes/           auth, checkout, inventory, customers, sales, reports, staff
-  services/         pricing, permissions, stock ledger, payments, audit events
-  db/               migrations and query helpers
+apps/
+  web/
+    src/             app shell and feature-oriented React client
+  api/
+    src/             NestJS modules, guards, services, and database access (target)
+shared/
+  src/               typed roles, money, identifiers, and API contracts
 ```
+
+The current API remains Express until its behavior is covered by migration tests. The database is still initialized at API startup; Prisma migrations are a later step.
 
 ## Modern operating workflows
 
@@ -51,7 +46,7 @@ server/
 
 ## Delivery sequence
 
-1. **Foundation:** capture current behavior, establish database migrations and API contracts, split the POS monolith by feature without changing behavior, and add a shared app shell and design tokens.
+1. **Foundation:** capture current behavior, establish workspace packages and typed shared permissions/money helpers, then split the POS monolith by feature without changing behavior. Versioned database migrations and the NestJS API remain outstanding.
 2. **Core operations:** finish scanner-first checkout and tender abstractions; add shifts, purchase receiving, stock ledger views, returns/exchanges, and approval rules.
 3. **Access and reliability:** capability-based access, audit events, session hardening, offline-safe catalog/cart with an explicit queued-sale reconciliation flow.
 4. **Insights and rollout:** operational reports, exports, accessibility and responsive polish, migration rehearsals, and staged deployment.

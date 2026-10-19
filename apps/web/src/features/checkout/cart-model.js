@@ -1,4 +1,5 @@
-import { saleUnitPrice } from "./pricing.js";
+import { addMinorUnits, multiplyMinorUnits } from "@counterpoint/shared/money";
+import { saleUnitPriceCents } from "./pricing.js";
 
 export function addCartItem(cart, product) {
   if (!product) return { cart, added: false, reason: "missing" };
@@ -34,9 +35,13 @@ export function removeCartItem(cart, productId) {
 
 export function summarizeCart(cart) {
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalCents = cart.reduce(
-    (sum, item) => sum + Math.round(saleUnitPrice(item, item.quantity) * 100) * item.quantity,
-    0,
+  const totalCents = addMinorUnits(
+    ...cart.map((item) =>
+      multiplyMinorUnits(
+        saleUnitPriceCents(item, item.quantity),
+        item.quantity,
+      ),
+    ),
   );
   return { count, subtotalCents: totalCents, totalCents, total: totalCents / 100 };
 }

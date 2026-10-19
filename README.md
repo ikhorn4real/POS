@@ -1,10 +1,10 @@
 # Counterpoint
 
-A retail inventory and point-of-sale app using React, Vite, Node.js, Express, and PostgreSQL.
+A retail inventory and point-of-sale app using React, Vite, Node.js, Express, and PostgreSQL. The web client lives in `apps/web`, the API lives in `apps/api`, and `shared` contains workspace code shared by both.
 
 ## Local setup
 
-1. Install Node.js 20.19+ (or 22.12+) and Docker Desktop.
+1. Install Node.js 22.12+ (the workspace pins pnpm 12.14.0) and Docker Desktop.
 2. Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell). Set `OWNER_NAME`, `OWNER_EMAIL`, and a private `OWNER_PASSWORD` of at least 12 characters. Generate a unique session secret with `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"` and put the result in `SESSION_SECRET`. Do not commit `.env`.
 3. Start PostgreSQL:
 
@@ -15,19 +15,19 @@ A retail inventory and point-of-sale app using React, Vite, Node.js, Express, an
 4. Create the first administrator account. The setup command creates the user table if needed, serializes concurrent setup attempts in PostgreSQL, and refuses to create another administrator:
 
    ```powershell
-   npm run setup:owner
+   pnpm --filter @counterpoint/api setup:owner
    ```
 
 5. Start the API in one terminal:
 
    ```powershell
-   npm run dev:api
+   pnpm --filter @counterpoint/api dev
    ```
 
 6. Start the Vite client in another terminal:
 
    ```powershell
-   npm run dev
+   pnpm --filter @counterpoint/web dev
    ```
 
    Open the local URL printed by Vite and sign in with `OWNER_EMAIL` and `OWNER_PASSWORD` from `.env`.
@@ -56,13 +56,14 @@ All roles can view, add, and edit customer records for their selected store, ass
 
 ## Commands
 
-```sh
-npm test       # isolated role, session, sales-scope, and owner-lock tests
-npm run lint
-npm run build
+```powershell
+pnpm test       # isolated role, session, sales-scope, and owner-lock tests
+pnpm run lint
+pnpm run typecheck
+pnpm --filter @counterpoint/web build
 ```
 
-`npm run start:api` starts the production API; after `npm run build`, it also serves the built client. Set `NODE_ENV=production`, use HTTPS, a strong `SESSION_SECRET`, a production PostgreSQL connection with TLS where required, and set `WEB_ORIGIN` to the exact public origin. `PGSSL=true` enables TLS verification for PostgreSQL.
+`pnpm --filter @counterpoint/api start` starts the production API; after building the web package, it also serves the client. Set `NODE_ENV=production`, use HTTPS, a strong `SESSION_SECRET`, a production PostgreSQL connection with TLS where required, and set `WEB_ORIGIN` to the exact public origin. `PGSSL=true` enables TLS verification for PostgreSQL.
 
 The database initialization drops legacy tax breakdown columns when the API starts; stored transaction totals are preserved.
 

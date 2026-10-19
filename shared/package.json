@@ -1,0 +1,26 @@
+{
+  "name": "@counterpoint/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "exports": {
+    "./permissions": {
+      "types": "./dist/permissions.d.ts",
+      "import": "./dist/permissions.js",
+      "default": "./dist/permissions.js"
+    },
+    "./money": {
+      "types": "./dist/money.d.ts",
+      "import": "./dist/money.js",
+      "default": "./dist/money.js"
+    }
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,4 +1,4 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import connectPgSimple from "connect-pg-simple";
 import { createHash, randomBytes } from "node:crypto";
@@ -45,6 +45,7 @@ import {
 
 const { Pool } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 const port = Number(process.env.PORT ?? 3001);
 const sessionSecret = process.env.SESSION_SECRET;
 
@@ -2469,7 +2470,7 @@ app.use("/api", (request, response, next) => {
   next(apiError(404, "API endpoint not found.", "NOT_FOUND"));
 });
 
-const distDir = path.resolve(__dirname, "../dist");
+const distDir = path.resolve(__dirname, "../../web/dist");
 if (existsSync(distDir)) {
   app.use(express.static(distDir));
   app.get(/.*/, (request, response, next) => {

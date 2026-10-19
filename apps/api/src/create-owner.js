@@ -1,7 +1,12 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import pg from "pg";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createInitialOwner } from "./owner-bootstrap.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 const { Pool } = pg;
 const name = process.env.OWNER_NAME?.trim();

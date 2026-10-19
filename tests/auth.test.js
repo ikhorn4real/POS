@@ -9,18 +9,18 @@ import {
   saleDetailQueryFor,
   salesQueryFor,
   salesSummaryQueryFor,
-} from "../server/auth.js";
-import { createInitialOwner } from "../server/owner-bootstrap.js";
+} from "../apps/api/src/auth.js";
+import { createInitialOwner } from "../apps/api/src/owner-bootstrap.js";
 import {
   generatedSku,
   productResponse,
   salePriceCents,
   skuConflict,
   validateProductInput,
-} from "../server/product-fields.js";
-import { supplierNameConflict, supplierResponse, validateSupplierInput } from "../server/suppliers.js";
-import { categoryNameConflict, categoryResponse, validateCategoryInput } from "../server/categories.js";
-import { customerIdFromInput, customerResponse, validateCustomerInput } from "../server/customers.js";
+} from "../apps/api/src/product-fields.js";
+import { supplierNameConflict, supplierResponse, validateSupplierInput } from "../apps/api/src/suppliers.js";
+import { categoryNameConflict, categoryResponse, validateCategoryInput } from "../apps/api/src/categories.js";
+import { customerIdFromInput, customerResponse, validateCustomerInput } from "../apps/api/src/customers.js";
 
 const roles = {
   owner: { id: 1, role: "owner", active: true, auth_version: 0, must_change_password: false },

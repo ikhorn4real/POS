@@ -6,7 +6,7 @@ import {
   fillSalesTrend,
   findExpiringProducts,
   lastDayKeys,
-} from "../src/dashboard-model.js";
+} from "../apps/web/src/dashboard-model.js";
 
 test("expiry watch includes expired and boundary dates but skips empty or invalid stock", () => {
   const products = [

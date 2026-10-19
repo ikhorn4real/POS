@@ -1,4 +1,4 @@
-import { roleCan } from "../../shared/permissions.js";
+import { roleCan } from "@counterpoint/shared/permissions";
 
 const pagePermissions = Object.freeze({
   overview: ["overview"],
